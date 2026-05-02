@@ -1,0 +1,40 @@
+{
+  "noodles": {
+    "phở": ["pho"],
+    "bún": ["bun"],
+    "mì": ["mi", "mỳ"],
+    "miến": ["mien"],
+    "hủ tiếu": ["hu tieu", "hủ tíu"]
+  },
+  "rice": {
+    "cơm": ["com", "rice"],
+    "xôi": ["xoi"],
+    "gạo": ["gao"]
+  },
+  "bread_rolls": {
+    "bánh mì": ["banh mi", "banh my"],
+    "chả giò": ["cha gio", "nem rán", "nem ran"],
+    "gỏi cuốn": ["goi cuon", "fresh roll", "summer roll"],
+    "nem cuốn": ["nem cuon"]
+  },
+  "proteins_meats": {
+    "bò": ["bo", "beef"],
+    "thịt bò": ["beef", "thit bo"],
+    "gà": ["ga", "chicken"],
+    "ức gà": ["chicken breast", "uc ga"],
+    "heo": ["pork", "lợn", "lon"],
+    "thịt heo": ["pork", "thit heo", "thit lon"],
+    "tôm": ["tom", "shrimp", "prawn"],
+    "cá": ["ca", "fish"],
+    "cá hồi": ["salmon", "ca hoi"],
+    "trứng": ["trung", "egg"]
+  },
+  "common_words": {
+    "nước": ["nuoc", "water"],
+    "dưa": ["dua"],
+    "dừa": ["dua", "coconut"],
+    "sữa": ["sua", "milk"],
+    "trà": ["tra", "tea"],
+    "cà phê": ["ca phe", "coffee"]
+  }
+}

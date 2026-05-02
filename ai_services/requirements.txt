@@ -1,0 +1,43 @@
+# AI Service Dependencies - NutriAI Vision Analysis
+
+# Core Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6         # File upload support
+httpx==0.25.2                    # Async HTTP client for backend API calls
+
+# Image Processing
+Pillow==10.1.0                   # Image compression & manipulation
+
+# Google Gemini AI
+google-generativeai>=0.8.0       # Gemini API with Function Calling support
+
+# Data Validation
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# Configuration
+python-dotenv==1.0.0
+
+# Caching
+redis==5.0.1                     # Redis cache for Vision AI
+
+# Database & Fuzzy Matching (Module 2)
+rapidfuzz==3.5.2                 # Fast fuzzy string matching
+sqlalchemy==2.0.23               # Database ORM
+psycopg2-binary==2.9.9           # PostgreSQL adapter
+
+# Vector Database (Module 6 - RAG Chatbot)
+qdrant-client==1.7.0             # Qdrant vector search
+
+# Local Embeddings (stable with Python 3.12)
+numpy<2                          # Torch 2.2.x compatibility
+sentence-transformers==2.3.1     # Local transformer models for embeddings
+torch==2.2.2                     # PyTorch (install CPU wheel in local/Docker setup)
+
+# Optional: Logging
+python-json-logger==2.0.7
+
+# Testing
+pytest==8.0.0
+pytest-asyncio==0.23.5

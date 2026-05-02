@@ -1,0 +1,377 @@
+{
+  "info": {
+    "_postman_id": "a1d90e4f-3b7b-4df2-9e11-backend-nutriai",
+    "name": "NutriAI Backend API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Postman collection for NutriAI backend APIs. Update collection variables before use."
+  },
+  "variable": [
+    { "key": "backendBaseUrl", "value": "http://localhost:8000" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "foodId", "value": "00000000-0000-0000-0000-000000000001" },
+    { "key": "recipeId", "value": "00000000-0000-0000-0000-000000000002" },
+    { "key": "goalId", "value": "00000000-0000-0000-0000-000000000003" },
+    { "key": "mealPlanId", "value": "00000000-0000-0000-0000-000000000004" },
+    { "key": "logId", "value": "00000000-0000-0000-0000-000000000005" },
+    { "key": "userId", "value": "00000000-0000-0000-0000-000000000006" },
+    { "key": "filename", "value": "sample.jpg" }
+  ],
+  "item": [
+    {
+      "name": "System",
+      "item": [
+        {
+          "name": "Root",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{backendBaseUrl}}/", "host": ["{{backendBaseUrl}}"], "path": [""] }
+          }
+        },
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{backendBaseUrl}}/health", "host": ["{{backendBaseUrl}}"], "path": ["health"] }
+          }
+        },
+        {
+          "name": "Database Info",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{backendBaseUrl}}/db/info", "host": ["{{backendBaseUrl}}"], "path": ["db", "info"] }
+          }
+        },
+        {
+          "name": "Database Test",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{backendBaseUrl}}/db/test", "host": ["{{backendBaseUrl}}"], "path": ["db", "test"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"SecurePass123\",\n  \"full_name\": \"Nguyen Van A\"\n}"
+            },
+            "url": { "raw": "{{backendBaseUrl}}/auth/register", "host": ["{{backendBaseUrl}}"], "path": ["auth", "register"] }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data.access_token) pm.collectionVariables.set('accessToken', data.access_token);",
+                  "if (data.refresh_token) pm.collectionVariables.set('refreshToken', data.refresh_token);",
+                  "pm.test('Login success', function () { pm.expect(pm.response.code).to.be.oneOf([200, 201]); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"SecurePass123\"\n}"
+            },
+            "url": { "raw": "{{backendBaseUrl}}/auth/login", "host": ["{{backendBaseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}"
+            },
+            "url": { "raw": "{{backendBaseUrl}}/auth/refresh", "host": ["{{backendBaseUrl}}"], "path": ["auth", "refresh"] }
+          }
+        },
+        {
+          "name": "Me",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data.user_id) pm.collectionVariables.set('userId', data.user_id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "url": { "raw": "{{backendBaseUrl}}/auth/me", "host": ["{{backendBaseUrl}}"], "path": ["auth", "me"] }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "url": { "raw": "{{backendBaseUrl}}/auth/logout", "host": ["{{backendBaseUrl}}"], "path": ["auth", "logout"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "User & Goals",
+      "item": [
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "url": { "raw": "{{backendBaseUrl}}/users/me/profile", "host": ["{{backendBaseUrl}}"], "path": ["users", "me", "profile"] }
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PATCH",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"gender\": \"male\",\n  \"height_cm\": 175,\n  \"activity_level\": \"moderately_active\",\n  \"language\": \"vi\"\n}" },
+            "url": { "raw": "{{backendBaseUrl}}/users/me/profile", "host": ["{{backendBaseUrl}}"], "path": ["users", "me", "profile"] }
+          }
+        },
+        {
+          "name": "Create Goal",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data.goal_id) pm.collectionVariables.set('goalId', data.goal_id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"goal_type\": \"weight_loss\",\n  \"current_weight_kg\": 72.5,\n  \"target_weight_kg\": 68,\n  \"daily_calorie_target\": 1800,\n  \"protein_target_g\": 120,\n  \"carbs_target_g\": 180,\n  \"fat_target_g\": 60\n}" },
+            "url": { "raw": "{{backendBaseUrl}}/users/me/goals", "host": ["{{backendBaseUrl}}"], "path": ["users", "me", "goals"] }
+          }
+        },
+        {
+          "name": "List Goals",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (Array.isArray(data) && data.length > 0 && data[0].goal_id) pm.collectionVariables.set('goalId', data[0].goal_id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "url": { "raw": "{{backendBaseUrl}}/users/me/goals", "host": ["{{backendBaseUrl}}"], "path": ["users", "me", "goals"] }
+          }
+        },
+        {
+          "name": "Active Goal",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data.goal_id) pm.collectionVariables.set('goalId', data.goal_id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "url": { "raw": "{{backendBaseUrl}}/users/me/goals/active", "host": ["{{backendBaseUrl}}"], "path": ["users", "me", "goals", "active"] }
+          }
+        },
+        {
+          "name": "Update Goal",
+          "request": {
+            "method": "PATCH",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"daily_calorie_target\": 1750,\n  \"protein_target_g\": 125\n}" },
+            "url": { "raw": "{{backendBaseUrl}}/users/me/goals/{{goalId}}", "host": ["{{backendBaseUrl}}"], "path": ["users", "me", "goals", "{{goalId}}"] }
+          }
+        },
+        {
+          "name": "Delete Goal",
+          "request": {
+            "method": "DELETE",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "url": { "raw": "{{backendBaseUrl}}/users/me/goals/{{goalId}}", "host": ["{{backendBaseUrl}}"], "path": ["users", "me", "goals", "{{goalId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Foods",
+      "item": [
+        { "name": "List Foods", "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const data = pm.response.json();", "if (data.foods && data.foods.length > 0 && data.foods[0].food_id) pm.collectionVariables.set('foodId', data.foods[0].food_id);"] } }], "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/foods", "host": ["{{backendBaseUrl}}"], "path": ["foods"] } } },
+        { "name": "Search Foods", "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const data = pm.response.json();", "if (data.foods && data.foods.length > 0 && data.foods[0].food_id) pm.collectionVariables.set('foodId', data.foods[0].food_id);"] } }], "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/foods/search?q=pho", "host": ["{{backendBaseUrl}}"], "path": ["foods", "search"], "query": [{ "key": "q", "value": "pho" }] } } },
+        { "name": "Food Categories", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/foods/categories", "host": ["{{backendBaseUrl}}"], "path": ["foods", "categories"] } } },
+        { "name": "Get Food By Barcode", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/foods/barcode/8938501434012", "host": ["{{backendBaseUrl}}"], "path": ["foods", "barcode", "8938501434012"] } } },
+        { "name": "Get Food Detail", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/foods/{{foodId}}", "host": ["{{backendBaseUrl}}"], "path": ["foods", "{{foodId}}"] } } },
+        { "name": "Get Food Portions", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/foods/{{foodId}}/portions", "host": ["{{backendBaseUrl}}"], "path": ["foods", "{{foodId}}", "portions"] } } },
+        {
+          "name": "Create Food",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name_vi\": \"Phở bò đặc biệt\",\n  \"name_en\": \"Special Beef Pho\",\n  \"category\": \"noodle\",\n  \"calories_per_100g\": 120,\n  \"protein_per_100g\": 8,\n  \"carbs_per_100g\": 14,\n  \"fat_per_100g\": 3\n}" },
+            "url": { "raw": "{{backendBaseUrl}}/foods", "host": ["{{backendBaseUrl}}"], "path": ["foods"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Food Logs",
+      "item": [
+        {
+          "name": "Create Food Log",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data.log_id) pm.collectionVariables.set('logId', data.log_id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"food_id\": \"{{foodId}}\",\n  \"serving_size_g\": 250,\n  \"quantity\": 1,\n  \"meal_type\": \"breakfast\",\n  \"meal_date\": \"2026-03-15\"\n}" },
+            "url": { "raw": "{{backendBaseUrl}}/food-logs/", "host": ["{{backendBaseUrl}}"], "path": ["food-logs", ""] }
+          }
+        },
+        { "name": "Daily Summary", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/food-logs/summary?meal_date=2026-03-15", "host": ["{{backendBaseUrl}}"], "path": ["food-logs", "summary"], "query": [{ "key": "meal_date", "value": "2026-03-15" }] } } },
+        { "name": "List Food Logs", "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const data = pm.response.json();", "if (Array.isArray(data) && data.length > 0 && data[0].log_id) pm.collectionVariables.set('logId', data[0].log_id);"] } }], "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/food-logs/?meal_date=2026-03-15", "host": ["{{backendBaseUrl}}"], "path": ["food-logs", ""], "query": [{ "key": "meal_date", "value": "2026-03-15" }] } } },
+        { "name": "Delete Food Log", "request": { "method": "DELETE", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/food-logs/{{logId}}", "host": ["{{backendBaseUrl}}"], "path": ["food-logs", "{{logId}}"] } } },
+        {
+          "name": "Create Weight Log",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"weight_kg\": 72.5,\n  \"measured_date\": \"2026-03-15\"\n}" },
+            "url": { "raw": "{{backendBaseUrl}}/food-logs/weight", "host": ["{{backendBaseUrl}}"], "path": ["food-logs", "weight"] }
+          }
+        },
+        { "name": "List Weight Logs", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/food-logs/weight", "host": ["{{backendBaseUrl}}"], "path": ["food-logs", "weight"] } } },
+        { "name": "Latest Weight", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/food-logs/weight/latest", "host": ["{{backendBaseUrl}}"], "path": ["food-logs", "weight", "latest"] } } }
+      ]
+    },
+    {
+      "name": "Recipes",
+      "item": [
+        { "name": "Create Recipe", "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const data = pm.response.json();", "if (data.recipe_id) pm.collectionVariables.set('recipeId', data.recipe_id);"] } }], "request": { "method": "POST", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name_vi\": \"Uc ga nuong\",\n  \"description\": \"Mon ga nuong don gian\",\n  \"category\": \"Main dish\",\n  \"difficulty_level\": \"easy\",\n  \"prep_time_minutes\": 10,\n  \"cook_time_minutes\": 30,\n  \"servings\": 2,\n  \"instructions\": \"Uop ga va nuong 20 phut\",\n  \"ingredients\": [\n    {\n      \"food_id\": \"{{foodId}}\",\n      \"ingredient_name\": \"Uc ga\",\n      \"quantity\": 200,\n      \"unit\": \"gram\"\n    }\n  ]\n}" }, "url": { "raw": "{{backendBaseUrl}}/api/recipes", "host": ["{{backendBaseUrl}}"], "path": ["api", "recipes"] } } },
+        { "name": "List Recipes", "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const data = pm.response.json();", "if (Array.isArray(data) && data.length > 0 && data[0].recipe_id) pm.collectionVariables.set('recipeId', data[0].recipe_id);"] } }], "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/recipes", "host": ["{{backendBaseUrl}}"], "path": ["api", "recipes"] } } },
+        { "name": "Search Recipes", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/recipes/search?q=ga", "host": ["{{backendBaseUrl}}"], "path": ["api", "recipes", "search"], "query": [{ "key": "q", "value": "ga" }] } } },
+        { "name": "Recipe Categories", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/recipes/categories", "host": ["{{backendBaseUrl}}"], "path": ["api", "recipes", "categories"] } } },
+        { "name": "Popular Recipes", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/recipes/popular", "host": ["{{backendBaseUrl}}"], "path": ["api", "recipes", "popular"] } } },
+        { "name": "Recipe Recommendations", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/recipes/recommendations", "host": ["{{backendBaseUrl}}"], "path": ["api", "recipes", "recommendations"] } } },
+        { "name": "Recipe Detail", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/recipes/{{recipeId}}", "host": ["{{backendBaseUrl}}"], "path": ["api", "recipes", "{{recipeId}}"] } } },
+        { "name": "Recipe Portions", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/recipes/{{recipeId}}/portions", "host": ["{{backendBaseUrl}}"], "path": ["api", "recipes", "{{recipeId}}", "portions"] } } },
+        { "name": "Update Recipe", "request": { "method": "PATCH", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"description\": \"Cap nhat mo ta recipe\"\n}" }, "url": { "raw": "{{backendBaseUrl}}/api/recipes/{{recipeId}}", "host": ["{{backendBaseUrl}}"], "path": ["api", "recipes", "{{recipeId}}"] } } },
+        { "name": "Favorite Recipe", "request": { "method": "POST", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/recipes/{{recipeId}}/favorite", "host": ["{{backendBaseUrl}}"], "path": ["api", "recipes", "{{recipeId}}", "favorite"] } } },
+        { "name": "My Favorite Recipes", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/recipes/favorites/my", "host": ["{{backendBaseUrl}}"], "path": ["api", "recipes", "favorites", "my"] } } },
+        { "name": "Match Ingredients", "request": { "method": "POST", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"ingredient_ids\": [\"{{foodId}}\"],\n  \"min_match_score\": 0.5,\n  \"limit\": 20\n}" }, "url": { "raw": "{{backendBaseUrl}}/api/recipes/match-ingredients", "host": ["{{backendBaseUrl}}"], "path": ["api", "recipes", "match-ingredients"] } } },
+        { "name": "Shopping List From Recipes", "request": { "method": "POST", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"recipe_ids\": [\"{{recipeId}}\"]\n}" }, "url": { "raw": "{{backendBaseUrl}}/api/recipes/shopping-list", "host": ["{{backendBaseUrl}}"], "path": ["api", "recipes", "shopping-list"] } } },
+        { "name": "Recipe Substitutions", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/recipes/{{recipeId}}/substitutions", "host": ["{{backendBaseUrl}}"], "path": ["api", "recipes", "{{recipeId}}", "substitutions"] } } }
+      ]
+    },
+    {
+      "name": "Meal Plans",
+      "item": [
+        { "name": "Generate Meal Plan", "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const data = pm.response.json();", "if (data.plan_id) pm.collectionVariables.set('mealPlanId', data.plan_id);"] } }], "request": { "method": "POST", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/v1/meal-plans/generate?plan_name=My Week Plan&days=7&tags=healthy,quick&max_cook_time=45", "host": ["{{backendBaseUrl}}"], "path": ["api", "v1", "meal-plans", "generate"], "query": [{ "key": "plan_name", "value": "My Week Plan" }, { "key": "days", "value": "7" }, { "key": "tags", "value": "healthy,quick" }, { "key": "max_cook_time", "value": "45" }] } } },
+        { "name": "List Meal Plans", "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const data = pm.response.json();", "if (Array.isArray(data) && data.length > 0 && data[0].plan_id) pm.collectionVariables.set('mealPlanId', data[0].plan_id);"] } }], "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/v1/meal-plans", "host": ["{{backendBaseUrl}}"], "path": ["api", "v1", "meal-plans"] } } },
+        { "name": "Meal Plan Detail", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/v1/meal-plans/{{mealPlanId}}", "host": ["{{backendBaseUrl}}"], "path": ["api", "v1", "meal-plans", "{{mealPlanId}}"] } } },
+        { "name": "Meal Plan Shopping List", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/v1/meal-plans/{{mealPlanId}}/shopping-list", "host": ["{{backendBaseUrl}}"], "path": ["api", "v1", "meal-plans", "{{mealPlanId}}", "shopping-list"] } } },
+        { "name": "Meal Plan Analysis", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/v1/meal-plans/{{mealPlanId}}/analysis", "host": ["{{backendBaseUrl}}"], "path": ["api", "v1", "meal-plans", "{{mealPlanId}}", "analysis"] } } },
+        { "name": "Regenerate Day", "request": { "method": "POST", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/v1/meal-plans/{{mealPlanId}}/regenerate-day?target_date=2026-03-15", "host": ["{{backendBaseUrl}}"], "path": ["api", "v1", "meal-plans", "{{mealPlanId}}", "regenerate-day"], "query": [{ "key": "target_date", "value": "2026-03-15" }] } } },
+        { "name": "Delete Meal Plan", "request": { "method": "DELETE", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/v1/meal-plans/{{mealPlanId}}", "host": ["{{backendBaseUrl}}"], "path": ["api", "v1", "meal-plans", "{{mealPlanId}}"] } } }
+      ]
+    },
+    {
+      "name": "Analytics & Recommendations",
+      "item": [
+        { "name": "Nutrition Trends", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/v1/analytics/nutrition-trends?start_date=2026-03-01&end_date=2026-03-15&group_by=day", "host": ["{{backendBaseUrl}}"], "path": ["api", "v1", "analytics", "nutrition-trends"], "query": [{ "key": "start_date", "value": "2026-03-01" }, { "key": "end_date", "value": "2026-03-15" }, { "key": "group_by", "value": "day" }] } } },
+        { "name": "Weight Progress", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/v1/analytics/weight-progress", "host": ["{{backendBaseUrl}}"], "path": ["api", "v1", "analytics", "weight-progress"] } } },
+        { "name": "Macro Distribution", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/v1/analytics/macro-distribution", "host": ["{{backendBaseUrl}}"], "path": ["api", "v1", "analytics", "macro-distribution"] } } },
+        { "name": "Calorie Comparison", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/v1/analytics/calorie-comparison?start_date=2026-03-01&end_date=2026-03-15", "host": ["{{backendBaseUrl}}"], "path": ["api", "v1", "analytics", "calorie-comparison"], "query": [{ "key": "start_date", "value": "2026-03-01" }, { "key": "end_date", "value": "2026-03-15" }] } } },
+        { "name": "Meal Patterns", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/v1/analytics/meal-patterns", "host": ["{{backendBaseUrl}}"], "path": ["api", "v1", "analytics", "meal-patterns"] } } },
+        { "name": "Goal Progress", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/v1/analytics/goal-progress", "host": ["{{backendBaseUrl}}"], "path": ["api", "v1", "analytics", "goal-progress"] } } },
+        { "name": "Food Frequency", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/v1/analytics/food-frequency", "host": ["{{backendBaseUrl}}"], "path": ["api", "v1", "analytics", "food-frequency"] } } },
+        { "name": "Weekly Summary", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/v1/analytics/weekly-summary", "host": ["{{backendBaseUrl}}"], "path": ["api", "v1", "analytics", "weekly-summary"] } } },
+        { "name": "Recommendation Health", "request": { "method": "GET", "url": { "raw": "{{backendBaseUrl}}/api/recommendations/health", "host": ["{{backendBaseUrl}}"], "path": ["api", "recommendations", "health"] } } },
+        { "name": "Next Meal Recommendation", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/recommendations/next-meal?meal_type=lunch", "host": ["{{backendBaseUrl}}"], "path": ["api", "recommendations", "next-meal"], "query": [{ "key": "meal_type", "value": "lunch" }] } } },
+        { "name": "Meal Timing", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/recommendations/meal-timing", "host": ["{{backendBaseUrl}}"], "path": ["api", "recommendations", "meal-timing"] } } }
+      ]
+    },
+    {
+      "name": "Uploads & Admin",
+      "item": [
+        {
+          "name": "Upload Food Image",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "/absolute/path/to/food-image.jpg" }
+              ]
+            },
+            "url": { "raw": "{{backendBaseUrl}}/api/v1/uploads/food-image", "host": ["{{backendBaseUrl}}"], "path": ["api", "v1", "uploads", "food-image"] }
+          }
+        },
+        { "name": "Upload Stats", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/v1/uploads/stats", "host": ["{{backendBaseUrl}}"], "path": ["api", "v1", "uploads", "stats"] } } },
+        { "name": "Delete Uploaded Image", "request": { "method": "DELETE", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/api/v1/uploads/image/{{filename}}", "host": ["{{backendBaseUrl}}"], "path": ["api", "v1", "uploads", "image", "{{filename}}"] } } },
+        { "name": "Admin Users", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/admin/users", "host": ["{{backendBaseUrl}}"], "path": ["admin", "users"] } } },
+        { "name": "Admin User Detail", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/admin/users/{{userId}}", "host": ["{{backendBaseUrl}}"], "path": ["admin", "users", "{{userId}}"] } } },
+        { "name": "Admin User Status", "request": { "method": "PATCH", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"is_active\": true\n}" }, "url": { "raw": "{{backendBaseUrl}}/admin/users/{{userId}}/status", "host": ["{{backendBaseUrl}}"], "path": ["admin", "users", "{{userId}}", "status"] } } },
+        { "name": "Admin Stats", "request": { "method": "GET", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/admin/stats", "host": ["{{backendBaseUrl}}"], "path": ["admin", "stats"] } } },
+        { "name": "Admin Delete User", "request": { "method": "DELETE", "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }] }, "url": { "raw": "{{backendBaseUrl}}/admin/users/{{userId}}", "host": ["{{backendBaseUrl}}"], "path": ["admin", "users", "{{userId}}"] } } }
+      ]
+    }
+  ]
+}

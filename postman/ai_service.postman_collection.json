@@ -1,0 +1,366 @@
+{
+  "info": {
+    "_postman_id": "7b9cf017-8bb0-4c4e-9f52-ai-nutriai",
+    "name": "NutriAI AI Service API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Postman collection for NutriAI AI services (vision, nutrition, chatbot, analytics)."
+  },
+  "variable": [
+    { "key": "aiBaseUrl", "value": "http://localhost:8001" },
+    { "key": "backendBaseUrl", "value": "http://localhost:8000" },
+    { "key": "backendJwt", "value": "" },
+    { "key": "sessionId", "value": "" },
+    { "key": "testEmail", "value": "" },
+    { "key": "testPassword", "value": "SecurePass123" },
+    { "key": "backendUserId", "value": "" },
+    { "key": "foodId", "value": "" },
+    { "key": "visionContext", "value": "{}" }
+  ],
+  "item": [
+    {
+      "name": "Backend Auth Bootstrap",
+      "item": [
+        {
+          "name": "Register Test User",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('testEmail', 'manual_ai_' + Date.now() + '@example.com');",
+                  "if (!pm.environment.get('testPassword')) {",
+                  "  pm.environment.set('testPassword', 'SecurePass123');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  var data = pm.response.json();",
+                  "  if (data.user_id) pm.environment.set('backendUserId', data.user_id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\",\n  \"full_name\": \"Postman AI Tester\"\n}"
+            },
+            "url": {
+              "raw": "{{backendBaseUrl}}/auth/register",
+              "host": ["{{backendBaseUrl}}"],
+              "path": ["auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login Get Backend JWT",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  var data = pm.response.json();",
+                  "  if (data.access_token) pm.environment.set('backendJwt', data.access_token);",
+                  "  pm.environment.set('sessionId', '');",
+                  "  pm.environment.set('foodId', '');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{backendBaseUrl}}/auth/login",
+              "host": ["{{backendBaseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "System",
+      "item": [
+        {
+          "name": "Root",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{aiBaseUrl}}/", "host": ["{{aiBaseUrl}}"], "path": [""] }
+          }
+        },
+        {
+          "name": "Service Health",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{aiBaseUrl}}/health", "host": ["{{aiBaseUrl}}"], "path": ["health"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Vision",
+      "item": [
+        {
+          "name": "Analyze Food Image",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  var data = pm.response.json();",
+                  "  pm.environment.set('visionContext', JSON.stringify(data));",
+                  "}",
+                  "if (pm.response.code >= 400) {",
+                  "  pm.environment.set('visionContext', '{}');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "image", "type": "file", "src": "/absolute/path/to/food-image.jpg" },
+                { "key": "user_hint", "value": "thit bo", "type": "text" }
+              ]
+            },
+            "url": { "raw": "{{aiBaseUrl}}/vision/analyze", "host": ["{{aiBaseUrl}}"], "path": ["vision", "analyze"] }
+          }
+        },
+        {
+          "name": "Vision Health",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{aiBaseUrl}}/vision/health", "host": ["{{aiBaseUrl}}"], "path": ["vision", "health"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Nutrition",
+      "item": [
+        {
+          "name": "Search Nutrition",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  var data = pm.response.json();",
+                  "  if (data.food && data.food.food_id) {",
+                  "    pm.environment.set('foodId', data.food.food_id);",
+                  "  } else if (data.candidates && data.candidates.length > 0 && data.candidates[0].food && data.candidates[0].food.food_id) {",
+                  "    pm.environment.set('foodId', data.candidates[0].food.food_id);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"food_name\": \"beef\",\n  \"return_top_k\": false,\n  \"limit\": 3,\n  \"threshold\": 60\n}"
+            },
+            "url": { "raw": "{{aiBaseUrl}}/nutrition/search", "host": ["{{aiBaseUrl}}"], "path": ["nutrition", "search"] }
+          }
+        },
+        {
+          "name": "Calculate Nutrition By Name",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"food_id\": \"{{foodId}}\",\n  \"food_name\": \"thit bo\",\n  \"portion_grams\": 200\n}"
+            },
+            "url": { "raw": "{{aiBaseUrl}}/nutrition/calculate-nutrition", "host": ["{{aiBaseUrl}}"], "path": ["nutrition", "calculate-nutrition"] }
+          }
+        },
+        {
+          "name": "Nutrition Health",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{aiBaseUrl}}/nutrition/health", "host": ["{{aiBaseUrl}}"], "path": ["nutrition", "health"] }
+          }
+        },
+        {
+          "name": "Nutrition Stats",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{aiBaseUrl}}/nutrition/stats", "host": ["{{aiBaseUrl}}"], "path": ["nutrition", "stats"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chatbot & RAG",
+      "item": [
+        {
+          "name": "Ask Question",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  var data = pm.response.json();",
+                  "  if (data.session_id) pm.environment.set('sessionId', data.session_id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"Thit bo co bao nhieu calories?\",\n  \"session_id\": \"{{sessionId}}\",\n  \"user_context\": {\n    \"current_weight\": 72,\n    \"goal_type\": \"lose_weight\",\n    \"daily_target\": 1800,\n    \"consumed_today\": 900\n  },\n  \"top_k\": 3,\n  \"score_threshold\": 0.35\n}"
+            },
+            "url": { "raw": "{{aiBaseUrl}}/chat/ask", "host": ["{{aiBaseUrl}}"], "path": ["chat", "ask"] }
+          }
+        },
+        {
+          "name": "Quick RAG",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{aiBaseUrl}}/chat/rag?question=Cam%20co%20vitamin%20C%20khong",
+              "host": ["{{aiBaseUrl}}"],
+              "path": ["chat", "rag"],
+              "query": [{ "key": "question", "value": "Cam co vitamin C khong" }]
+            }
+          }
+        },
+        {
+          "name": "Function Calling",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"Tim mon an giau protein, it calo\",\n  \"user_id\": \"{{backendUserId}}\"\n}"
+            },
+            "url": { "raw": "{{aiBaseUrl}}/chat/function-calling", "host": ["{{aiBaseUrl}}"], "path": ["chat", "function-calling"] }
+          }
+        },
+        {
+          "name": "Chat With Vision",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"Mon nay co phu hop de giam can khong?\",\n  \"vision_context\": {{visionContext}},\n  \"user_context\": {\n    \"current_weight\": 72,\n    \"goal_type\": \"lose_weight\",\n    \"daily_target\": 1800,\n    \"consumed_today\": 900\n  }\n}"
+            },
+            "url": { "raw": "{{aiBaseUrl}}/chat/with-vision", "host": ["{{aiBaseUrl}}"], "path": ["chat", "with-vision"] }
+          }
+        },
+        {
+          "name": "Chat Health",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{aiBaseUrl}}/chat/health", "host": ["{{aiBaseUrl}}"], "path": ["chat", "health"] }
+          }
+        },
+        {
+          "name": "RAG Collection Info",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{aiBaseUrl}}/chat/collection/info", "host": ["{{aiBaseUrl}}"], "path": ["chat", "collection", "info"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "AI Analytics Insights",
+      "item": [
+        {
+          "name": "Weekly Insights",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{backendJwt}}" }
+            ],
+            "url": {
+              "raw": "{{aiBaseUrl}}/analytics/weekly-insights?language=vi",
+              "host": ["{{aiBaseUrl}}"],
+              "path": ["analytics", "weekly-insights"],
+              "query": [{ "key": "language", "value": "vi" }]
+            }
+          }
+        },
+        {
+          "name": "Goal Insights",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{backendJwt}}" }
+            ],
+            "url": {
+              "raw": "{{aiBaseUrl}}/analytics/goal-insights?language=vi",
+              "host": ["{{aiBaseUrl}}"],
+              "path": ["analytics", "goal-insights"],
+              "query": [{ "key": "language", "value": "vi" }]
+            },
+            "description": "Requires backend user with an active goal."
+          }
+        },
+        {
+          "name": "Nutrition Trend Insights",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{backendJwt}}" }
+            ],
+            "url": {
+              "raw": "{{aiBaseUrl}}/analytics/nutrition-trend-insights?days=30&language=vi",
+              "host": ["{{aiBaseUrl}}"],
+              "path": ["analytics", "nutrition-trend-insights"],
+              "query": [
+                { "key": "days", "value": "30" },
+                { "key": "language", "value": "vi" }
+              ]
+            },
+            "description": "Needs backend nutrition trends data in selected date range."
+          }
+        },
+        {
+          "name": "Analytics Health",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{aiBaseUrl}}/analytics/health", "host": ["{{aiBaseUrl}}"], "path": ["analytics", "health"] }
+          }
+        }
+      ]
+    }
+  ]
+}

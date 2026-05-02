@@ -1,0 +1,561 @@
+# 🍎 NUTRITION ADVICE - HƯỚNG DẪN TÍCH HỢP AI
+
+## 📋 Tổng quan
+
+Đã tạo module **Nutrition Advice** cho phép AI phân tích dữ liệu dinh dưỡng và cân nặng, đưa ra lời khuyên cá nhân hóa.
+
+---
+
+## 📁 Cấu trúc file đã tạo
+
+```
+ai_services/app/
+├── prompts/
+│   └── nutrition_advice_prompt.py    # 📝 PROMPT templates chính
+├── services/
+│   └── nutrition_advice_service.py  # 🔧 Service xử lý logic
+└── routes/
+    └── advice.py                     # 🌐 API endpoints
+```
+
+---
+
+## 🔗 API Endpoints
+
+### 1. POST `/api/v1/advice/full` - Lời khuyên đầy đủ
+
+**Mục đích:** Phân tích toàn diện dinh dưỡng + cân nặng
+
+**Headers:**
+```
+Authorization: Bearer <JWT_TOKEN>
+```
+
+**Request Body:**
+```json
+{
+    "days": 7,
+    "period": "week",
+    "language": "vi"
+}
+```
+
+**Response:**
+```json
+{
+    "summary": "Bạn đã kiểm soát tốt lượng calories trong tuần qua...",
+    "highlights": [
+        "Protein đạt 95% mục tiêu",
+        "Ăn uống đều đặn 3 bữa chính"
+    ],
+    "concerns": [
+        "Carbs hơi cao vào cuối tuần"
+    ],
+    "recommendations": [
+        "💡 Giảm cơm trắng buổi tối, thay bằng rau trộn"
+    ],
+    "motivational_tip": "Tiếp tục phấn đấu!",
+    "period": "week",
+    "days_analyzed": 7,
+    "generated_at": "2026-04-11T10:30:00"
+}
+```
+
+### 2. POST `/api/v1/advice/quick` - Lời khuyên nhanh
+
+**Mục đích:** Gợi ý bữa ăn tiếp theo trong ngày
+
+**Headers:**
+```
+Authorization: Bearer <JWT_TOKEN>
+```
+
+**Request Body:**
+```json
+{
+    "target_date": "2026-04-11",
+    "language": "vi"
+}
+```
+
+**Response:**
+```json
+{
+    "quick_tip": "Còn 450kcal cho bữa tối - ưu tiên protein!",
+    "action": "Chọn 150g cá hồi nướng + rau trộn",
+    "why": "Bạn đã thiếu protein 30g, cá hồi là nguồn protein tuyệt vời",
+    "date": "2026-04-11",
+    "generated_at": "2026-04-11T18:00:00"
+}
+```
+
+### 3. POST `/api/v1/advice/progress` - Báo cáo tiến độ
+
+**Mục đích:** Báo cáo tiến độ tuần/tháng
+
+**Headers:**
+```
+Authorization: Bearer <JWT_TOKEN>
+```
+
+**Request Body:**
+```json
+{
+    "period": "week",
+    "language": "vi"
+}
+```
+
+**Response:**
+```json
+{
+    "period": "week",
+    "overall_score": 85,
+    "summary": "Tuần này bạn đã đạt được nhiều tiến bộ...",
+    "weight_analysis": {
+        "progress": "Giảm 0.5kg trong tuần",
+        "on_track": true,
+        "reasoning": "Tốc độ giảm phù hợp với mục tiêu"
+    },
+    "nutrition_analysis": {
+        "calorie_adherence": "85% ngày tuân thủ mục tiêu",
+        "protein_quality": "Tốt - đạt 90% TB",
+        "consistency": "Ăn đều 3 bữa chính"
+    },
+    "achievements": [
+        "Giảm 0.5kg",
+        "Tuân thủ 6/7 ngày"
+    ],
+    "areas_for_improvement": [
+        "Cuối tuần ăn nhiều hơn mục tiêu"
+    ],
+    "next_week_tips": [
+        "Chuẩn bị meal prep cuối tuần"
+    ],
+    "motivation": "Bạn đang làm rất tốt!",
+    "days_analyzed": 7,
+    "generated_at": "2026-04-11T10:00:00"
+}
+```
+
+---
+
+## 📝 PROMPTS CHÍNH
+
+### Prompt 1: `build_nutrition_advice_prompt()`
+
+**Chức năng:** Tạo PROMPT cho lời khuyên đầy đủ dựa trên:
+- Thông tin người dùng (cân nặng, mục tiêu, mục tiêu calo)
+- Phân tích cân nặng (theo ngày/tuần/tháng)
+- Tổng quan dinh dưỡng (calories, protein, carbs, fat)
+- Mẫu bữa ăn
+- Dữ liệu hôm nay
+
+**Input:**
+```python
+user_context = {
+    "current_weight_kg": 75,
+    "goal_type": "lose_weight",
+    "target_weight_kg": 70,
+    "daily_calorie_target": 2000,
+    "target_protein_g": 120,
+    "target_carbs_g": 200,
+    "target_fat_g": 67,
+    "height_cm": 175,
+    "age": 30,
+    "gender": "male",
+    "activity_level": "moderate"
+}
+
+nutrition_trends = [
+    {"date": "2026-04-01", "total_calories": 1800, "protein": 100, "carbs": 200, "fat": 60, "meal_count": 3},
+    {"date": "2026-04-02", "total_calories": 2100, "protein": 110, "carbs": 220, "fat": 70, "meal_count": 4},
+    # ...
+]
+
+weight_progress = {
+    "starting_weight": 76,
+    "current_weight": 75,
+    "target_weight": 70,
+    "change_kg": -1,
+    "change_percentage": -1.3,
+    "trend": "losing",
+    "history": [
+        {"date": "2026-04-01", "weight_kg": 76},
+        {"date": "2026-04-05", "weight_kg": 75.5},
+        {"date": "2026-04-10", "weight_kg": 75}
+    ]
+}
+```
+
+**Output:** Prompt string cho Gemini
+
+---
+
+### Prompt 2: `build_quick_advice_prompt()`
+
+**Chức năng:** Lời khuyên NHANH cho bữa ăn tiếp theo
+
+**Input:**
+```python
+user_context = {
+    "current_weight_kg": 75,
+    "goal_type": "lose_weight",
+    "daily_calorie_target": 2000,
+    "target_protein_g": 120
+}
+
+daily_summary = {
+    "date": "2026-04-11",
+    "total_calories": 1550,
+    "protein": 90,
+    "carbs": 150,
+    "fat": 45,
+    "meal_count": 2
+}
+
+# → Còn 450kcal, cần thêm 30g protein
+```
+
+**Output:** Prompt cho quick tip
+
+---
+
+### Prompt 3: `build_progress_report_prompt()`
+
+**Chức năng:** Báo cáo tiến độ tuần/tháng
+
+**Input:** Tương tự prompt 1 + weekly summaries
+
+**Output:** JSON với:
+- `overall_score`: Điểm tổng thể (0-100)
+- `weight_analysis`: Phân tích cân nặng
+- `nutrition_analysis`: Phân tích dinh dưỡng
+- `achievements`: Thành tựu
+- `areas_for_improvement`: Cần cải thiện
+- `next_week_tips`: Tips cho tuần tới
+
+---
+
+## 🔧 Cách sử dụng trong Frontend (React)
+
+### 1. Tạo API client
+
+```typescript
+// web_app/src/api/nutritionAdvice.ts
+import { apiClient } from './client';
+
+export const nutritionAdviceApi = {
+  // Lời khuyên đầy đủ
+  getFullAdvice: async (days = 7, period: 'day' | 'week' | 'month' = 'week') => {
+    const response = await apiClient.post('/ai/v1/advice/full', {
+      days,
+      period,
+      language: 'vi'
+    });
+    return response.data;
+  },
+
+  // Lời khuyên nhanh
+  getQuickAdvice: async (targetDate?: string) => {
+    const response = await apiClient.post('/ai/v1/advice/quick', {
+      target_date: targetDate,
+      language: 'vi'
+    });
+    return response.data;
+  },
+
+  // Báo cáo tiến độ
+  getProgressReport: async (period: 'week' | 'month' = 'week') => {
+    const response = await apiClient.post('/ai/v1/advice/progress', {
+      period,
+      language: 'vi'
+    });
+    return response.data;
+  }
+};
+```
+
+### 2. Sử dụng trong Analytics Page
+
+```typescript
+// web_app/src/pages/Analytics/index.tsx
+import { nutritionAdviceApi } from '@/api/nutritionAdvice';
+import { useAuth } from '@/hooks/useAuth';
+
+const AnalyticsPage = () => {
+  const { token } = useAuth();
+
+  // Lấy lời khuyên đầy đủ
+  const { data: advice, isLoading } = useQuery({
+    queryKey: ['nutritionAdvice', 'full', 7],
+    queryFn: () => nutritionAdviceApi.getFullAdvice(7, 'week'),
+    enabled: !!token
+  });
+
+  // Lấy lời khuyên nhanh
+  const { data: quickTip } = useQuery({
+    queryKey: ['nutritionAdvice', 'quick'],
+    queryFn: () => nutritionAdviceApi.getQuickAdvice(),
+    enabled: !!token
+  });
+
+  return (
+    <div>
+      {/* Panel lời khuyên AI */}
+      <AIConsultationPanel
+        summary={advice?.summary}
+        highlights={advice?.highlights}
+        concerns={advice?.concerns}
+        recommendations={advice?.recommendations}
+        motivationalTip={advice?.motivational_tip}
+      />
+
+      {/* Quick tip */}
+      <QuickTipCard
+        tip={quickTip?.quick_tip}
+        action={quickTip?.action}
+        why={quickTip?.why}
+      />
+    </div>
+  );
+};
+```
+
+### 3. Component mẫu
+
+```typescript
+// web_app/src/components/AIAdvicePanel.tsx
+interface AIAdvicePanelProps {
+  summary: string;
+  highlights: string[];
+  concerns: string[];
+  recommendations: string[];
+  motivationalTip: string;
+}
+
+export const AIAdvicePanel = ({
+  summary,
+  highlights,
+  concerns,
+  recommendations,
+  motivationalTip
+}: AIAdvicePanelProps) => {
+  return (
+    <div className="bg-gradient-to-br from-green-50 to-blue-50 rounded-xl p-6 shadow-lg">
+      {/* Summary */}
+      <div className="mb-4">
+        <h3 className="text-lg font-semibold text-gray-800 mb-2">
+          📊 Tổng quan
+        </h3>
+        <p className="text-gray-600">{summary}</p>
+      </div>
+
+      {/* Highlights */}
+      {highlights.length > 0 && (
+        <div className="mb-4">
+          <h4 className="text-sm font-semibold text-green-600 mb-2">
+            ✨ Điểm sáng
+          </h4>
+          <ul className="list-disc list-inside text-sm text-gray-700">
+            {highlights.map((h, i) => <li key={i}>{h}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {/* Concerns */}
+      {concerns.length > 0 && (
+        <div className="mb-4">
+          <h4 className="text-sm font-semibold text-amber-600 mb-2">
+            ⚠️ Cần lưu ý
+          </h4>
+          <ul className="list-disc list-inside text-sm text-gray-700">
+            {concerns.map((c, i) => <li key={i}>{c}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {/* Recommendations */}
+      {recommendations.length > 0 && (
+        <div className="mb-4">
+          <h4 className="text-sm font-semibold text-blue-600 mb-2">
+            💡 Lời khuyên
+          </h4>
+          <ul className="list-disc list-inside text-sm text-gray-700">
+            {recommendations.map((r, i) => <li key={i}>{r}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {/* Motivation */}
+      {motivationalTip && (
+        <div className="mt-4 p-3 bg-white rounded-lg border border-green-200">
+          <p className="text-sm text-green-700 italic">
+            🌟 {motivationalTip}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
+```
+
+---
+
+## 📊 Dữ liệu AI phân tích
+
+### 1. Thông tin người dùng
+- Cân nặng hiện tại / mục tiêu
+- Chiều cao, tuổi, giới tính
+- Mục tiêu (giảm cân / tăng cơ / duy trì)
+- Mức độ vận động
+- Mục tiêu dinh dưỡng (calorie, protein, carbs, fat)
+
+### 2. Phân tích cân nặng
+- Cân nặng ban đầu → hiện tại
+- Thay đổi (kg, %)
+- Xu hướng (tăng / giảm / ổn định)
+- **Theo từng ngày / tuần / tháng**
+
+### 3. Tổng quan dinh dưỡng
+- Calories trung bình/ngày
+- Protein / Carbs / Fat trung bình
+- So sánh với mục tiêu
+- Xu hướng (tăng / giảm / ổn định)
+
+### 4. Mẫu bữa ăn
+- Bữa sáng: số bữa, TB calories
+- Bữa trưa: số bữa, TB calories
+- Bữa tối: số bữa, TB calories
+- Bữa phụ: số bữa, TB calories
+
+### 5. Dữ liệu hôm nay
+- Calories đã ăn / còn lại
+- Protein đã đạt / còn thiếu
+
+---
+
+## 🎯 Ví dụ Output thực tế
+
+### Full Advice
+```json
+{
+  "summary": "Tuần qua bạn đã kiểm soát tốt lượng calories với 85% ngày tuân thủ mục tiêu. Tuy nhiên, protein chỉ đạt 78% mục tiêu trung bình.",
+  "highlights": [
+    "✅ Kiểm soát calories tốt - 6/7 ngày trong mục tiêu",
+    "✅ Ăn uống đều đặn 3 bữa chính",
+    "✅ Xu hướng cân nặng giảm nhẹ (-0.3kg/tuần)"
+  ],
+  "concerns": [
+    "⚠️ Protein chỉ đạt 78% mục tiêu (78g/100g TB)",
+    "⚠️ Cuối tuần (T7, CN) có xu hướng ăn vượt mục tiêu 300-400kcal"
+  ],
+  "recommendations": [
+    "💡 Thêm 1 nguồn protein vào bữa phụ: 30g phô mai = 10g protein, 100kcal",
+    "💡 Chuẩn bị meal prep cuối tuần để tránh ăn vượt mục tiêu",
+    "💡 Tăng thêm 1 bữa sáng giàu protein: 2 trứng + 1 ly sữa = 25g protein"
+  ],
+  "motivational_tip": "Bạn đang làm rất tốt! Tiếp tục duy trì thói quen ăn uống lành mạnh nhé!"
+}
+```
+
+### Quick Advice
+```json
+{
+  "quick_tip": "Còn 400kcal cho bữa tối - ưu tiên protein!",
+  "action": "Chọn 150g ức gà nướng + rau luộc",
+  "why": "Bạn đã thiếu 25g protein hôm nay, ức gà là nguồn protein nạc tuyệt vời (31g/100g)"
+}
+```
+
+---
+
+## 🚀 Chạy và test
+
+### 1. Start AI Service
+```bash
+cd ai_services
+uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+```
+
+### 2. Test endpoints
+```bash
+# Health check
+curl http://localhost:8001/advice/health
+
+# Full advice
+curl -X POST http://localhost:8001/api/v1/advice/full \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"days": 7, "period": "week", "language": "vi"}'
+
+# Quick advice
+curl -X POST http://localhost:8001/api/v1/advice/quick \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"language": "vi"}'
+
+# Progress report
+curl -X POST http://localhost:8001/api/v1/advice/progress \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"period": "week", "language": "vi"}'
+```
+
+### 3. API Documentation
+Mở http://localhost:8001/docs để xem Swagger UI
+
+---
+
+## 🔑 Lưu ý quan trọng
+
+1. **Authentication:** Tất cả endpoints đều yêu cầu JWT token trong header
+2. **Rate Limiting:** Nên cache kết quả, không gọi API liên tục
+3. **Fallback:** Nếu AI không hoạt động, hiển thị message mặc định
+4. **Cache:** Lời khuyên có thể cache 1-2 giờ, không cần refresh liên tục
+5. **Data Quality:** AI cần đủ data (ít nhất 3-5 ngày) để phân tích hiệu quả
+
+---
+
+## 📈 Tích hợp với Analytics Page hiện tại
+
+Thêm component vào trang Analytics hiện tại:
+
+```typescript
+// Trong web_app/src/pages/Analytics/index.tsx
+
+import { AIAdvicePanel } from '@/components/AIAdvicePanel';
+
+// Trong component
+const [adviceData, setAdviceData] = useState(null);
+const [loading, setLoading] = useState(false);
+
+useEffect(() => {
+  if (token) {
+    setLoading(true);
+    nutritionAdviceApi.getFullAdvice(7, 'week')
+      .then(setAdviceData)
+      .finally(() => setLoading(false));
+  }
+}, [token]);
+
+// Render
+return (
+  <div>
+    {/* Existing content */}
+    
+    {/* AI Advice Panel */}
+    {loading ? (
+      <Skeleton className="h-64" />
+    ) : adviceData ? (
+      <AIAdvicePanel
+        summary={adviceData.summary}
+        highlights={adviceData.highlights}
+        concerns={adviceData.concerns}
+        recommendations={adviceData.recommendations}
+        motivationalTip={adviceData.motivational_tip}
+      />
+    ) : null}
+  </div>
+);
+```
