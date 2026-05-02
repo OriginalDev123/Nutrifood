@@ -192,7 +192,18 @@ def build_nutrition_advice_prompt(
 
         weight_analysis_text = "\n".join(weight_analysis_lines)
     else:
-        weight_analysis_text = "⚠️ Chưa có dữ liệu cân nặng"
+        # Case: không có dữ liệu cân nặng
+        weight_analysis_text = (
+            "⚠️ **Chưa có dữ liệu cân nặng.**\n\n"
+            "Bạn chưa ghi nhận cân nặng nào. Để theo dõi tiến độ hiệu quả, hãy:\n\n"
+            "• **Ghi nhận cân nặng hàng ngày**: Cân vào mỗi sáng, cùng giờ\n"
+            "• **Theo dõi xu hướng**: Việc cân đều đặn giúp AI phân tích chính xác hơn\n"
+            "• **Đặt mục tiêu cân nặng**: Xác định cân nặng mục tiêu để có kế hoạch rõ ràng\n\n"
+            "Dựa trên thông tin cá nhân của bạn, đây là cân nặng hiện tại được ghi nhận:\n"
+            f"- **Cân nặng**: {user_context.get('current_weight_kg', 'Chưa có thông tin')} kg\n"
+            f"- **Chiều cao**: {user_context.get('height_cm', 'Chưa có thông tin')} cm\n"
+            f"- **Mục tiêu**: {goal_type_map.get(user_context.get('goal_type', ''), user_context.get('goal_type', 'Chưa xác định'))}"
+        )
 
     # ==========================================
     # 3. NUTRITION TRENDS
@@ -229,6 +240,12 @@ def build_nutrition_advice_prompt(
         protein_target = user_context.get('target_protein_g', 0)
         protein_ratio = (avg_protein / protein_target * 100) if protein_target > 0 else 0
 
+        # Kiểm tra nếu có ít hơn 3 ngày dữ liệu
+        if total_days < 3:
+            warning_note = f"⚠️ **Lưu ý**: Dữ liệu chỉ có {total_days} ngày. Hãy tiếp tục theo dõi để có phân tích chính xác hơn."
+        else:
+            warning_note = ""
+
         nutrition_summary_lines = [
             f"- **Số ngày phân tích**: {total_days} ngày",
             f"- **Lượng tiêu thụ trung bình/ngày**:",
@@ -239,6 +256,9 @@ def build_nutrition_advice_prompt(
             f"- **Số bữa ăn trung bình/ngày**: {avg_meals:.1f}",
             f"- **Xu hướng calories**: {trend_direction}",
         ]
+
+        if warning_note:
+            nutrition_summary_lines.append(f"\n{warning_note}")
 
         # Chi tiết từng ngày (7 ngày gần nhất)
         recent_trends = nutrition_trends[-7:]
@@ -252,10 +272,22 @@ def build_nutrition_advice_prompt(
             status_icon = "🔴" if diff > 200 else "🟡" if diff > 50 else "🟢"
             trend_detail_lines.append(f"    {status_icon} {date_str}: {cal:.0f} kcal, {prot:.0f}g protein, {meals} bữa")
 
-        nutrition_summary_lines.append(f"\n**📅 Chi tiết 7 ngày gần nhất:**\n" + "\n".join(trend_detail_lines))
+        nutrition_summary_lines.append(f"\n**📅 Chi tiết {min(7, total_days)} ngày gần nhất:**\n" + "\n".join(trend_detail_lines))
         nutrition_summary_text = "\n".join(nutrition_summary_lines)
     else:
-        nutrition_summary_text = "⚠️ Chưa có dữ liệu dinh dưỡng"
+        # Case: hoàn toàn không có dữ liệu
+        nutrition_summary_text = (
+            "⚠️ **Chưa có dữ liệu dinh dưỡng.**\n\n"
+            "Hiện tại bạn chưa ghi nhận bữa ăn nào. Hãy bắt đầu ghi nhận bữa ăn hàng ngày để nhận "
+            "lời khuyên cá nhân hóa.\n\n"
+            "Tuy nhiên, dựa trên thông tin cá nhân và mục tiêu của bạn, tôi vẫn có thể đưa ra "
+            "một số lời khuyên chung để bạn bắt đầu:\n\n"
+            "• **Bắt đầu từ hôm nay**: Ghi nhận ít nhất 1 bữa ăn để có baseline\n"
+            "• **Theo dõi đều đặn**: Cố gắng ghi nhận mỗi bữa ăn để AI phân tích chính xác hơn\n"
+            "• **Đặt mục tiêu thực tế**: Xác định rõ mục tiêu giảm cân/tăng cân/duy trì\n"
+            "• **Uống đủ nước**: Ít nhất 2 lít nước mỗi ngày\n"
+            "• **Ăn đủ rau xanh**: Bổ sung rau xanh trong mỗi bữa ăn chính"
+        )
 
     # ==========================================
     # 4. DAILY SUMMARY (HÔM NAY)
