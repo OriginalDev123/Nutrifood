@@ -401,7 +401,12 @@ class NutritionAdviceService:
         # 2. Build user context
         user_context = self._build_user_context(data)
 
-        # 3. Build prompt
+        # Log data availability for debugging
+        nutrition_trends = data.get("nutrition_trends", [])
+        weight_progress = data.get("weight_progress", {})
+        logger.info(f"📊 Data available - nutrition trends: {len(nutrition_trends)} days, weight history: {len(weight_progress.get('history', []))} entries")
+
+        # 3. Build prompt (handles empty data gracefully)
         prompt = build_nutrition_advice_prompt(
             user_context=user_context,
             nutrition_trends=data.get("nutrition_trends", []),
@@ -482,6 +487,9 @@ class NutritionAdviceService:
         daily_summary = results[1] if not isinstance(results[1], Exception) else {}
         remaining = results[2] if not isinstance(results[2], Exception) else {}
 
+        # Log data availability
+        logger.info(f"⚡ Quick advice data - daily summary: {bool(daily_summary)}, remaining: {bool(remaining)}")
+
         # Build user context
         user_context = {
             "current_weight_kg": user_profile.get("data", user_profile).get("current_weight_kg") if isinstance(user_profile, dict) else None,
@@ -559,6 +567,9 @@ class NutritionAdviceService:
         user_profile = results[0] if not isinstance(results[0], Exception) else {}
         weight_progress = results[1] if not isinstance(results[1], Exception) else {}
         nutrition_trends = results[2] if not isinstance(results[2], Exception) else []
+
+        # Log data availability
+        logger.info(f"📈 Progress report data - weight history: {len(weight_progress.get('history', []))}, nutrition days: {len(nutrition_trends)}")
 
         # Build user context
         user_context = {

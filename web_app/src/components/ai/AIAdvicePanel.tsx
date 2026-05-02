@@ -1,4 +1,4 @@
-import { Sparkles, TrendingUp, TrendingDown, Minus, RefreshCw, ChevronRight, Lightbulb, Trophy, Target, CheckCircle2, AlertTriangle, ThumbsUp } from 'lucide-react';
+import { Sparkles, TrendingUp, TrendingDown, Minus, RefreshCw, ChevronRight, Lightbulb, Trophy, Target, CheckCircle2, AlertTriangle, ThumbsUp, Zap } from 'lucide-react';
 import { Card, CardBody, Skeleton } from '../ui';
 import type { NutritionAdviceResponse, QuickAdviceResponse, ProgressReportResponse } from '../../api/extended';
 
@@ -44,7 +44,7 @@ export function NutritionAdvicePanel({ advice, isLoading, onRefresh, period }: N
         <CardBody className="text-center py-8">
           <Sparkles className="w-10 h-10 text-gray-400 mx-auto mb-3" />
           <p className="text-gray-500 mb-2">Chưa có lời khuyên</p>
-          <p className="text-sm text-gray-400">Dữ liệu dinh dưỡng cần ít nhất 3 ngày để phân tích</p>
+          <p className="text-sm text-gray-400">Nhấn nút "Nhận lời khuyên AI" để bắt đầu phân tích</p>
           {onRefresh && (
             <button
               onClick={onRefresh}
@@ -402,6 +402,8 @@ interface AIAdviceFullPageProps {
   selectedPeriod: 'day' | 'week' | 'month';
   onPeriodChange: (period: 'day' | 'week' | 'month') => void;
   onRefresh: () => void;
+  onRequestAdvice: () => void;
+  hasRequestedAdvice: boolean;
 }
 
 export function AIAdviceFullPage({
@@ -414,7 +416,47 @@ export function AIAdviceFullPage({
   selectedPeriod,
   onPeriodChange,
   onRefresh,
+  onRequestAdvice,
+  hasRequestedAdvice,
 }: AIAdviceFullPageProps) {
+  // Show placeholder UI when user hasn't requested advice yet
+  if (!hasRequestedAdvice) {
+    return (
+      <div className="text-center py-16 px-4">
+        <div className="w-24 h-24 mx-auto mb-6 bg-gradient-to-br from-primary/10 to-purple-100 rounded-full flex items-center justify-center">
+          <Sparkles className="w-12 h-12 text-primary" />
+        </div>
+        <h3 className="text-2xl font-bold text-gray-900 mb-3">
+          Nhận lời khuyên dinh dưỡng từ AI
+        </h3>
+        <p className="text-gray-500 mb-8 max-w-md mx-auto leading-relaxed">
+          AI sẽ phân tích dữ liệu dinh dưỡng của bạn và đưa ra
+          lời khuyên cá nhân hóa dựa trên mục tiêu sức khỏe.
+        </p>
+        <button
+          onClick={onRequestAdvice}
+          className="px-8 py-4 bg-primary text-white rounded-xl font-semibold
+                     hover:bg-primary/90 transition-all duration-200
+                     shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30
+                     flex items-center gap-3 mx-auto"
+        >
+          <Zap className="w-5 h-5" />
+          Nhận lời khuyên AI
+        </button>
+        <div className="flex items-center justify-center gap-6 mt-8 text-sm text-gray-400">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-green-400" />
+            <span>Phân tích cá nhân hóa</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-blue-400" />
+            <span>Lời khuyên thực tế</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Period Selector */}

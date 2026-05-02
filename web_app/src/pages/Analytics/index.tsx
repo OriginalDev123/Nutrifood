@@ -21,6 +21,7 @@ export default function AnalyticsPage() {
   const [selectedAdvicePeriod, setSelectedAdvicePeriod] = useState<'day' | 'week' | 'month'>('week');
   const [showWeightInput, setShowWeightInput] = useState(false);
   const [currentWeight, setCurrentWeight] = useState('');
+  const [hasRequestedAdvice, setHasRequestedAdvice] = useState(false);
   const today = new Date().toISOString().split('T')[0];
   const periodNum = parseInt(selectedPeriod, 10);
   const queryClient = useQueryClient();
@@ -93,6 +94,12 @@ export default function AnalyticsPage() {
     },
   });
 
+  // Fetch AI advice when user clicks the request button
+  const handleRequestAdvice = () => {
+    setHasRequestedAdvice(true);
+    fetchAdvice();
+  };
+
   // Default daily target ~2000 kcal, can be extended to read from user profile
   const dailyTarget = 2000;
   const remainingCalorie = dailyTarget - (macroDistribution?.total_calories ?? 0);
@@ -133,6 +140,7 @@ export default function AnalyticsPage() {
       queryKey: ['progressReport'],
       queryFn: () => analyticsApi.getProgressReport('week', 'vi'),
     });
+    toast.success('Đã làm mới lời khuyên!');
   };
 
   const renderWeightInput = () => {
@@ -636,6 +644,8 @@ export default function AnalyticsPage() {
                 selectedPeriod={selectedAdvicePeriod}
                 onPeriodChange={setSelectedAdvicePeriod}
                 onRefresh={fetchAdvice}
+                onRequestAdvice={handleRequestAdvice}
+                hasRequestedAdvice={hasRequestedAdvice}
               />
             </CardBody>
           </TabPanel>
