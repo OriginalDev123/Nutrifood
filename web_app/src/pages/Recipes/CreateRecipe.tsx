@@ -1,15 +1,25 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Plus, Trash2, PlusCircle } from 'lucide-react';
 import { Card, CardBody, CardHeader, Button, Input, Select, useToast } from '../../components/ui';
 import { PageContainer } from '../../components/layout';
 import { recipeApi } from '../../api/recipe';
+import { useAuthStore } from '../../stores/authStore';
 
 export default function CreateRecipePage() {
   const navigate = useNavigate();
   const toast = useToast();
   const queryClient = useQueryClient();
+  const isAdmin = useAuthStore((state) => state.user?.is_admin);
+
+  // Redirect non-admin users
+  useEffect(() => {
+    if (isAdmin === false) {
+      toast.error('Chỉ admin mới có quyền tạo công thức');
+      navigate('/recipes');
+    }
+  }, [isAdmin, navigate, toast]);
 
   const [formData, setFormData] = useState({
     name_vi: '',

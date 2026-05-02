@@ -5,9 +5,11 @@ import { Plus, Search, Clock, Users, ChefHat, Flame, Sparkles } from 'lucide-rea
 import { Card, CardBody, Button, Badge, Skeleton, EmptyState } from '../../components/ui';
 import { PageContainer } from '../../components/layout';
 import { recipeApi } from '../../api/recipe';
+import { useAuthStore } from '../../stores/authStore';
 
 export default function RecipesPage() {
   const navigate = useNavigate();
+  const isAdmin = useAuthStore((state) => state.user?.is_admin);
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
   const [category, setCategory] = useState('');
@@ -61,9 +63,11 @@ export default function RecipesPage() {
       title="Công thức nấu ăn"
       subtitle={`${total} công thức có sẵn`}
       action={
-        <Link to="/recipes/new">
-          <Button leftIcon={<Plus className="w-4 h-4" />}>Tạo công thức</Button>
-        </Link>
+        isAdmin && (
+          <Link to="/recipes/new">
+            <Button leftIcon={<Plus className="w-4 h-4" />}>Tạo công thức</Button>
+          </Link>
+        )
       }
     >
       {/* Search */}

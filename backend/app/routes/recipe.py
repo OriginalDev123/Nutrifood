@@ -30,7 +30,7 @@ router = APIRouter(
 @router.post("", response_model=schemas.RecipeDetailResponse, status_code=status.HTTP_201_CREATED)
 def create_recipe(
     recipe_data: schemas.RecipeCreate,
-    current_user: User = Depends(get_current_active_user),
+    current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """

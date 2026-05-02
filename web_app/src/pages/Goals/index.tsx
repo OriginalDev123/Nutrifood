@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Target, Calendar, Check, Flame, Scale, Timer } from 'lucide-react';
 import { Card, CardBody, CardHeader, Button, Badge, Modal, Input, EmptyState, useToast } from '../../components/ui';
+import { DatePicker } from '../../components/ui/DatePicker';
 import { PageContainer } from '../../components/layout';
 import { goalApi } from '../../api/goal';
 
@@ -190,16 +191,8 @@ function CreateGoalModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
   const [goalType, setGoalType] = useState('weight_loss');
   const [currentWeight, setCurrentWeight] = useState('');
   const [targetWeight, setTargetWeight] = useState('');
+  const [targetDate, setTargetDate] = useState('');
   const [calorieTarget, setCalorieTarget] = useState('');
-  const [activityLevel, setActivityLevel] = useState('moderately_active');
-
-  const activityLevels = [
-    { value: 'sedentary', label: 'Ít vận động' },
-    { value: 'lightly_active', label: 'Vận động nhẹ' },
-    { value: 'moderately_active', label: 'Vận động vừa' },
-    { value: 'very_active', label: 'Vận động nhiều' },
-    { value: 'extra_active', label: 'Vận động rất nhiều' },
-  ];
 
   const handleCreate = () => {
     const cw = parseFloat(currentWeight);
@@ -221,6 +214,20 @@ function CreateGoalModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
         return;
       }
     }
+    // Validation cho ngày đích khi giảm/tăng cân
+    if ((goalType === 'weight_loss' || goalType === 'weight_gain') && !targetDate) {
+      toast.error('Vui lòng chọn ngày đích để đạt mục tiêu');
+      return;
+    }
+    if (targetDate) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const selectedDate = new Date(targetDate);
+      if (selectedDate <= today) {
+        toast.error('Ngày đích phải lớn hơn ngày hiện tại');
+        return;
+      }
+    }
     createMutation.mutate();
   };
 
@@ -229,16 +236,16 @@ function CreateGoalModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
       goal_type: goalType as any,
       current_weight_kg: parseFloat(currentWeight),
       target_weight_kg: targetWeight ? parseFloat(targetWeight) : undefined,
+      target_date: targetDate || undefined,
       daily_calorie_target: calorieTarget ? parseInt(calorieTarget) : undefined,
-      activity_level: activityLevel as any,
     }),
     onSuccess: () => {
       toast.success('Đã tạo mục tiêu mới');
       queryClient.invalidateQueries({ queryKey: ['goals'] });
       setCurrentWeight('');
       setTargetWeight('');
+      setTargetDate('');
       setCalorieTarget('');
-      setActivityLevel('moderately_active');
       setGoalType('weight_loss');
       onClose();
     },
@@ -299,6 +306,16 @@ function CreateGoalModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
           placeholder="60"
         />
 
+        {(goalType === 'weight_loss' || goalType === 'weight_gain') && (
+          <DatePicker
+            label="Ngày đích (muốn đạt được vào ngày)"
+            value={targetDate}
+            onChange={(e) => setTargetDate(e.target.value)}
+            min={new Date().toISOString().split('T')[0]}
+            placeholder="Chọn ngày"
+          />
+        )}
+
         <Input
           label="Calories mục tiêu/ngày"
           type="number"
@@ -306,25 +323,6 @@ function CreateGoalModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
           onChange={(e) => setCalorieTarget(e.target.value)}
           placeholder="2000"
         />
-
-        <div className="rounded-2xl border border-gray-200 bg-gray-50/80 p-4">
-          <label className="block text-sm font-medium text-gray-700 mb-3">Mức độ hoạt động</label>
-          <div className="grid grid-cols-1 gap-2">
-            {activityLevels.map(opt => (
-              <button
-                key={opt.value}
-                onClick={() => setActivityLevel(opt.value)}
-                className={`rounded-xl border p-3 text-left text-sm font-medium transition-colors ${
-                  activityLevel === opt.value
-                    ? 'border-primary bg-primary/10 text-primary shadow-sm'
-                    : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
 
         <div className="flex gap-3 pt-2">
           <Button variant="outline" onClick={onClose} className="flex-1">Hủy</Button>
