@@ -32,6 +32,7 @@ from app.routes import analytics
 from app.routes import uploads
 from app.routes import recipe
 from app.routes import recommend
+from app.routes import health_profile
 
 
 
@@ -129,6 +130,7 @@ app.include_router(auth.router)
 # Protected user routes
 app.include_router(user.router)      # User profile
 app.include_router(goal.router)      # User goals
+app.include_router(health_profile.router)  # Health profile
 app.include_router(food.router)      # Food database
 app.include_router(food_log.router)  # Food & weight logging
 app.include_router(recipe.router)     # Recipe management & matcher (Module 4)

@@ -8,11 +8,13 @@ from sqlalchemy.orm import Session
 from typing import List, Optional, Dict
 from datetime import date
 from uuid import UUID
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.models.user import User
 from app.models.meal_plan import MealPlan
 from app.schemas import meal_plan as schemas
+from app.schemas.health_profile import HealthProfileInput
 
 # Re-export for convenience
 MealPlanWithItems = schemas.MealPlanWithItems
@@ -39,65 +41,95 @@ router = APIRouter(
 
 
 # ==========================================
-# GENERATE MEAL PLAN (NEW)
+# REQUEST BODY SCHEMA FOR GENERATION
+# ==========================================
+
+class GenerateMealPlanRequest(BaseModel):
+    """Request body for meal plan generation with health profile support"""
+    plan_name: str
+    days: int = 7
+    categories: Optional[str] = None
+    tags: Optional[str] = None
+    max_cook_time: Optional[int] = None
+    health_profile: Optional[HealthProfileInput] = None
+
+
+# ==========================================
+# GENERATE MEAL PLAN (NEW - WITH BODY + HEALTH PROFILE)
 # ==========================================
 
 @router.post("/generate", response_model=schemas.MealPlanWithDays, status_code=status.HTTP_201_CREATED)
-def generate_meal_plan(
-    plan_name: str = Query(..., min_length=1, max_length=255),
-    days: int = Query(7, ge=1, le=30),
-    categories: Optional[str] = Query(None, description="Comma-separated categories"),
-    tags: Optional[str] = Query(None, description="Comma-separated tags (e.g., vegetarian,low-carb)"),
-    max_cook_time: Optional[int] = Query(None, ge=0, description="Maximum cooking time in minutes"),
+def generate_meal_plan_with_body(
+    request: GenerateMealPlanRequest,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     """
-    Generate intelligent meal plan from recipes
-    
+    Generate intelligent meal plan from recipes with health profile support
+
     **Algorithm:**
     1. Gets user's active goal (calorie target)
     2. Calculates calories per meal type (breakfast 25%, lunch 35%, dinner 30%, snack 10%)
-    3. Finds recipes matching preferences & calorie range
-    4. Distributes recipes across days
-    5. Balances macros based on goal type
-    6. Avoids repetition
-    
-    **Query Parameters:**
+    3. If health_profile provided:
+       - Filter out recipes containing allergens
+       - Prioritize recipes matching dietary preferences
+       - Consider health conditions in suggestions
+    4. Finds recipes matching preferences & calorie range
+    5. Distributes recipes across days
+    6. Balances macros based on goal type
+    7. Avoids repetition
+
+    **Request Body:**
     - plan_name: Name for the meal plan (required)
     - days: Number of days (1-30, default: 7)
-    - categories: Filter recipes by categories (comma-separated)
-    - tags: Filter by tags like "vegetarian,low-carb"
-    - max_cook_time: Maximum total cooking time per recipe
-    
-    **Requires:**
-    - Active goal with calorie target
-    - At least 10-20 recipes in database
-    
-    **Returns:**
-    - Complete meal plan with items for each day
-    
+    - categories: Comma-separated categories (optional)
+    - tags: Comma-separated tags like "vegetarian,low-carb" (optional)
+    - max_cook_time: Maximum cooking time in minutes (optional)
+    - health_profile: Health profile for personalized planning (optional)
+        - health_conditions: List of health conditions
+        - food_allergies: List of food allergies (will be EXCLUDED)
+        - dietary_preferences: List of dietary preferences
+
     **Example:**
-    ```
-    POST /meal-plans/generate?plan_name=My Week&days=7&tags=healthy,quick&max_cook_time=45
+    ```json
+    POST /meal-plans/generate
+    {
+      "plan_name": "Kế hoạch giảm cân tuần này",
+      "days": 7,
+      "health_profile": {
+        "health_conditions": ["Tiểu đường type 2"],
+        "food_allergies": ["Hải sản", "Đậu phộng"],
+        "dietary_preferences": ["Low Carb", "Eat Clean"]
+      }
+    }
     ```
     """
-    
+
     try:
         preferences = {}
-        if categories:
-            preferences["categories"] = [c.strip() for c in categories.split(",")]
-        if tags:
-            preferences["tags"] = [t.strip() for t in tags.split(",")]
-        if max_cook_time:
-            preferences["max_cook_time"] = max_cook_time
+        if request.categories:
+            preferences["categories"] = [c.strip() for c in request.categories.split(",")]
+        if request.tags:
+            preferences["tags"] = [t.strip() for t in request.tags.split(",")]
+        if request.max_cook_time:
+            preferences["max_cook_time"] = request.max_cook_time
+
+        # Convert health profile to dict for service
+        health_profile_dict = None
+        if request.health_profile:
+            health_profile_dict = {
+                "health_conditions": request.health_profile.health_conditions or [],
+                "food_allergies": request.health_profile.food_allergies or [],
+                "dietary_preferences": request.health_profile.dietary_preferences or [],
+            }
 
         plan = generate_meal_plan_service(
             db=db,
             user_id=current_user.user_id,
-            plan_name=plan_name,
-            days=days,
-            preferences=preferences if preferences else None
+            plan_name=request.plan_name,
+            days=request.days,
+            preferences=preferences if preferences else None,
+            health_profile=health_profile_dict
         )
         # Convert to days format for frontend
         return schemas.MealPlanWithDays.from_meal_plan(plan)

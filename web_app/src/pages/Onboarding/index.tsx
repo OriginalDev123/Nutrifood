@@ -11,10 +11,13 @@ import {
   Mars,
   Venus,
   CircleUserRound,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button, Input, Card, CardBody, useToast } from '../../components/ui';
 import { userApi } from '../../api/user';
 import { goalApi, type CreateGoalData } from '../../api/goal';
+import { healthProfileApi, type HealthProfileData } from '../../api/healthProfile';
+import { HealthProfileModal } from '../../components/health';
 import type { UserGoal } from '../../api/types';
 import {
   isOnboardingPending,
@@ -77,7 +80,8 @@ function buildGoalPayload(
   currentWeight: number,
   targetWeight: number,
   weeks: number,
-  goalType: GoalType
+  goalType: GoalType,
+  healthProfile?: HealthProfileData
 ): CreateGoalData {
   const w = Math.max(1, weeks);
   const targetDate = addDaysLocalISO(w * 7);
@@ -87,6 +91,9 @@ function buildGoalPayload(
     current_weight_kg: currentWeight,
     target_weight_kg: targetWeight,
     target_date: targetDate,
+    health_conditions: healthProfile?.health_conditions,
+    food_allergies: healthProfile?.food_allergies,
+    dietary_preferences: healthProfile?.dietary_preferences,
   };
 }
 
@@ -97,13 +104,23 @@ export default function OnboardingPage() {
   // Dùng ref để theo dõi step — tránh guard effect chạy sau khi user đã bắt đầu
   const hasStartedRef = useRef(false);
 
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  // Steps: 1=welcome, 2=personal info, 3=health profile, 4=goal, 5=confirm
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
 
   const [fullName, setFullName] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [gender, setGender] = useState<'male' | 'female' | 'other' | ''>('');
   const [heightCm, setHeightCm] = useState(170);
   const [currentWeightKg, setCurrentWeightKg] = useState(65);
+
+  // Health profile state
+  const [healthProfile, setHealthProfile] = useState<HealthProfileData>({
+    health_conditions: [],
+    food_allergies: [],
+    dietary_preferences: [],
+  });
+  const [isHealthProfileModalOpen, setIsHealthProfileModalOpen] = useState(false);
+  const [skipHealthProfile, setSkipHealthProfile] = useState(false);
 
   const [goalType, setGoalType] = useState<GoalType>('weight_loss');
   const [targetWeightKg, setTargetWeightKg] = useState(65);
@@ -115,6 +132,7 @@ export default function OnboardingPage() {
 
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingGoal, setSavingGoal] = useState(false);
+  const [savingHealthProfile, setSavingHealthProfile] = useState(false);
   const [step2Error, setStep2Error] = useState<string | null>(null);
 
   // Guard: chỉ redirect nếu chưa bắt đầu onboarding (step=1) và không còn pending
@@ -131,7 +149,7 @@ export default function OnboardingPage() {
   );
 
   useEffect(() => {
-    if (step !== 3 || kgPerWeekPreview === null) {
+    if (step !== 4 || kgPerWeekPreview === null) {
       setHintKgPerWeek(null);
       return;
     }
@@ -216,13 +234,37 @@ export default function OnboardingPage() {
         return currentWeightKg;
       });
 
-      setStep(3);
+      setStep(3); // Go to health profile step
     } catch (err) {
       setStep2Error(getAxiosDetail(err));
       toast.error(getAxiosDetail(err));
     } finally {
       setSavingProfile(false);
     }
+  };
+
+  const handleHealthProfileContinue = async () => {
+    // Save health profile if not skipped and has data
+    if (!skipHealthProfile && (
+      healthProfile.health_conditions.length > 0 ||
+      healthProfile.food_allergies.length > 0 ||
+      healthProfile.dietary_preferences.length > 0
+    )) {
+      setSavingHealthProfile(true);
+      try {
+        await healthProfileApi.updateMyProfile({
+          health_conditions: healthProfile.health_conditions,
+          food_allergies: healthProfile.food_allergies,
+          dietary_preferences: healthProfile.dietary_preferences,
+        });
+      } catch (err) {
+        // Silently fail - health profile is optional
+        console.error('Failed to save health profile:', err);
+      } finally {
+        setSavingHealthProfile(false);
+      }
+    }
+    setStep(4); // Go to goal step
   };
 
   const handleStep3Continue = async () => {
@@ -251,13 +293,13 @@ export default function OnboardingPage() {
     const effectiveTarget =
       goalType === 'maintain' ? currentWeightKg : targetWeightKg;
 
-    const payload = buildGoalPayload(currentWeightKg, effectiveTarget, weeks, goalType);
+    const payload = buildGoalPayload(currentWeightKg, effectiveTarget, weeks, goalType, healthProfile);
 
     setSavingGoal(true);
     try {
       const goal = await goalApi.create(payload);
       setCreatedGoal(goal);
-      setStep(4);
+      setStep(5);
       toast.success('Đã lưu mục tiêu dinh dưỡng');
     } catch (err) {
       const msg = getAxiosDetail(err);
@@ -273,9 +315,14 @@ export default function OnboardingPage() {
     navigate('/dashboard', { replace: true });
   };
 
+  const hasHealthProfileData =
+    healthProfile.health_conditions.length > 0 ||
+    healthProfile.food_allergies.length > 0 ||
+    healthProfile.dietary_preferences.length > 0;
+
   const progressBar = (
     <div className="flex gap-1.5 w-full max-w-md mx-auto mb-6">
-      {[1, 2, 3, 4].map((i) => (
+      {[1, 2, 3, 4, 5].map((i) => (
         <div
           key={i}
           className={`h-1.5 flex-1 rounded-full transition-colors ${
@@ -285,6 +332,11 @@ export default function OnboardingPage() {
       ))}
     </div>
   );
+
+  const handleSaveHealthProfile = (data: HealthProfileData) => {
+    setHealthProfile(data);
+    setIsHealthProfileModalOpen(false);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-emerald-50/80 via-white to-white flex flex-col">
@@ -407,7 +459,90 @@ export default function OnboardingPage() {
           </div>
         )}
 
+        {/* Step 3: Health Profile */}
         {step === 3 && (
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+                <Heart className="w-5 h-5" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-gray-900">Thể trạng của bạn</h1>
+                <p className="text-sm text-gray-500">Giúp AI đề xuất thực đơn phù hợp</p>
+              </div>
+            </div>
+
+            <Card className="mt-4 border-gray-100 shadow-sm">
+              <CardBody className="space-y-4">
+                <div className="flex items-start gap-3 p-3 bg-amber-50 rounded-xl border border-amber-100">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="text-sm text-amber-800">
+                    <p className="font-medium mb-1">Thông tin này giúp AI cá nhân hóa tốt hơn</p>
+                    <p className="text-amber-700">Bạn có thể bỏ qua bước này và cập nhật sau.</p>
+                  </div>
+                </div>
+
+                {/* Health Conditions */}
+                {healthProfile.health_conditions.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-2">Điều kiện sức khỏe:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {healthProfile.health_conditions.map((condition) => (
+                        <span key={condition} className="px-2 py-1 bg-blue-100 text-blue-700 text-sm rounded-full">
+                          {condition}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Food Allergies */}
+                {healthProfile.food_allergies.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-2">Dị ứng thực phẩm:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {healthProfile.food_allergies.map((allergy) => (
+                        <span key={allergy} className="px-2 py-1 bg-red-100 text-red-700 text-sm rounded-full">
+                          {allergy}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Dietary Preferences */}
+                {healthProfile.dietary_preferences.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-2">Chế độ ăn ưu tiên:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {healthProfile.dietary_preferences.map((pref) => (
+                        <span key={pref} className="px-2 py-1 bg-emerald-100 text-emerald-700 text-sm rounded-full">
+                          {pref}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!hasHealthProfileData && (
+                  <p className="text-sm text-gray-500 text-center py-4">
+                    Chưa có thông tin thể trạng
+                  </p>
+                )}
+
+                <Button
+                  variant="outline"
+                  onClick={() => setIsHealthProfileModalOpen(true)}
+                  className="w-full"
+                >
+                  {hasHealthProfileData ? 'Chỉnh sửa thể trạng' : 'Nhập thông tin thể trạng'}
+                </Button>
+              </CardBody>
+            </Card>
+          </div>
+        )}
+
+        {step === 4 && (
           <div className="flex-1">
             <h1 className="text-xl font-bold text-gray-900 mb-1">Mục tiêu của bạn là gì?</h1>
             <p className="text-sm text-gray-500 mb-5">
@@ -539,7 +674,7 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {step === 4 && createdGoal && (
+        {step === 5 && createdGoal && (
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
               <div className="w-9 h-9 rounded-full bg-primary text-white flex items-center justify-center">
@@ -576,6 +711,26 @@ export default function OnboardingPage() {
                     <p className="font-semibold text-gray-900">Đề xuất</p>
                   </div>
                 </div>
+
+                {/* Health Profile Summary */}
+                {hasHealthProfileData && (
+                  <div className="pt-3 border-t border-gray-100">
+                    <p className="text-xs font-bold text-gray-400 tracking-wide mb-2">THỂ TRẠNG</p>
+                    <div className="flex flex-wrap gap-2">
+                      {healthProfile.food_allergies.length > 0 && (
+                        <span className="px-2 py-1 bg-red-100 text-red-700 text-xs rounded-full flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3" />
+                          {healthProfile.food_allergies.length} dị ứng
+                        </span>
+                      )}
+                      {healthProfile.dietary_preferences.length > 0 && (
+                        <span className="px-2 py-1 bg-emerald-100 text-emerald-700 text-xs rounded-full">
+                          {healthProfile.dietary_preferences.length} chế độ ăn
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </CardBody>
             </Card>
 
@@ -622,7 +777,7 @@ export default function OnboardingPage() {
       </div>
 
       {/* Footer nav */}
-      {(step === 2 || step === 3 || step === 4) && (
+      {(step === 2 || step === 3 || step === 4 || step === 5) && (
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/95 border-t border-gray-100 backdrop-blur-sm">
           <div className="max-w-lg mx-auto flex gap-3">
             {step > 1 && (
@@ -630,12 +785,16 @@ export default function OnboardingPage() {
                 variant="outline"
                 className="flex-1"
                 onClick={() => {
-                  if (step === 4) {
+                  if (step === 5) {
                     setCreatedGoal(null);
                     setGoalError(null);
+                    setStep(4);
+                  } else if (step === 4) {
                     setStep(3);
+                  } else if (step === 3) {
+                    setStep(2);
                   } else {
-                    setStep((s) => (s > 1 ? ((s - 1) as 1 | 2 | 3 | 4) : s));
+                    setStep((s) => (s > 1 ? ((s - 1) as 1 | 2 | 3 | 4 | 5) : s));
                   }
                 }}
               >
@@ -652,6 +811,27 @@ export default function OnboardingPage() {
               </Button>
             )}
             {step === 3 && (
+              <div className="flex flex-col flex-[2] gap-2">
+                <Button
+                  className="w-full"
+                  isLoading={savingHealthProfile}
+                  onClick={handleHealthProfileContinue}
+                >
+                  Tiếp tục
+                </Button>
+                <button
+                  type="button"
+                  className="text-sm text-gray-500 hover:text-gray-800"
+                  onClick={() => {
+                    setSkipHealthProfile(true);
+                    setStep(4);
+                  }}
+                >
+                  Bỏ qua bước này
+                </button>
+              </div>
+            )}
+            {step === 4 && (
               <Button
                 className="flex-[2]"
                 isLoading={savingGoal}
@@ -660,7 +840,7 @@ export default function OnboardingPage() {
                 Tiếp tục
               </Button>
             )}
-            {step === 4 && (
+            {step === 5 && (
               <div className="flex flex-col flex-[2] gap-2">
                 <Button className="w-full" onClick={finishOnboarding}>
                   Tiếp tục đăng nhập
@@ -671,7 +851,7 @@ export default function OnboardingPage() {
                   onClick={() => {
                     setCreatedGoal(null);
                     setGoalError(null);
-                    setStep(3);
+                    setStep(4);
                   }}
                 >
                   Quay lại chỉnh sửa
@@ -681,6 +861,15 @@ export default function OnboardingPage() {
           </div>
         </div>
       )}
+
+      {/* Health Profile Modal */}
+      <HealthProfileModal
+        isOpen={isHealthProfileModalOpen}
+        onClose={() => setIsHealthProfileModalOpen(false)}
+        onSave={handleSaveHealthProfile}
+        initialData={healthProfile}
+        isLoading={savingHealthProfile}
+      />
     </div>
   );
 }

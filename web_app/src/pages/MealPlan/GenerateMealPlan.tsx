@@ -1,10 +1,12 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Sparkles, Calendar, Clock, UtensilsCrossed } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Sparkles, Calendar, Clock, UtensilsCrossed, Heart, AlertTriangle } from 'lucide-react';
 import { Card, CardBody, CardHeader, Button, Input, Badge, useToast, Modal } from '../../components/ui';
 import { PageContainer } from '../../components/layout';
 import { mealPlanApi } from '../../api/mealPlan';
+import { healthProfileApi, type HealthProfileData } from '../../api/healthProfile';
+import { HealthProfileModal, HealthProfileDisplay } from '../../components/health';
 import type { MealPlanItem, MealPlanWithItems } from '../../api/extended';
 import { useDeleteMealPlan } from '../../hooks/useDeleteMealPlan';
 
@@ -96,7 +98,21 @@ export default function GenerateMealPlanPage() {
     max_cook_time: '',
   });
 
+  // Health profile state
+  const [healthProfile, setHealthProfile] = useState<HealthProfileData | null>(null);
+  const [isHealthProfileModalOpen, setIsHealthProfileModalOpen] = useState(false);
+
   const [previewPlan, setPreviewPlan] = useState<MealPlanWithItems | null>(null);
+
+  // Load saved health profile
+  const { data: savedHealthProfile, refetch: refetchHealthProfile } = useQuery({
+    queryKey: ['healthProfile'],
+    queryFn: () => healthProfileApi.getMyProfile(),
+    retry: false,
+    onSuccess: (data) => {
+      setHealthProfile(data);
+    },
+  });
 
   const closePreview = useCallback(() => {
     setPreviewPlan(null);
@@ -110,6 +126,7 @@ export default function GenerateMealPlanPage() {
         categories: formData.categories || undefined,
         tags: formData.tags || undefined,
         max_cook_time: formData.max_cook_time ? parseInt(formData.max_cook_time, 10) : undefined,
+        health_profile: healthProfile || undefined,
       }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['mealPlans'] });
@@ -128,6 +145,20 @@ export default function GenerateMealPlanPage() {
     },
     onError: (error: any) => {
       toast.error(error?.response?.data?.detail || 'Không thể hủy kế hoạch');
+    },
+  });
+
+  // Save health profile mutation
+  const saveHealthProfileMutation = useMutation({
+    mutationFn: (data: HealthProfileData) => healthProfileApi.updateMyProfile(data),
+    onSuccess: (data) => {
+      setHealthProfile(data);
+      setIsHealthProfileModalOpen(false);
+      toast.success('Đã lưu thông tin thể trạng!');
+      refetchHealthProfile();
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.detail || 'Lưu thể trạng thất bại');
     },
   });
 
@@ -152,10 +183,20 @@ export default function GenerateMealPlanPage() {
     deletePreviewMutation.mutate(previewPlan.plan_id);
   };
 
+  const handleSaveHealthProfile = (data: HealthProfileData) => {
+    saveHealthProfileMutation.mutate(data);
+  };
+
+  const hasHealthProfileData = healthProfile && (
+    (healthProfile.health_conditions && healthProfile.health_conditions.length > 0) ||
+    (healthProfile.food_allergies && healthProfile.food_allergies.length > 0) ||
+    (healthProfile.dietary_preferences && healthProfile.dietary_preferences.length > 0)
+  );
+
   return (
     <PageContainer
       title="Tạo kế hoạch ăn uống"
-      subtitle="Sử dụng AI để tạo kế hoạch ăn uống phù hợp với mục tiêu của bạn"
+      subtitle="Sử dụng AI để tạo kế hoạch ăn uống phù hợp với mục tiêu và thể trạng của bạn"
       action={
         <Button variant="outline" onClick={() => navigate('/meal-plans')}>
           <ArrowLeft className="w-4 h-4 mr-2" />
@@ -173,7 +214,7 @@ export default function GenerateMealPlanPage() {
             <div>
               <h3 className="font-semibold text-gray-900 mb-1">Kế hoạch cá nhân hóa</h3>
               <p className="text-sm text-gray-600">
-                AI sẽ tạo kế hoạch ăn uống dựa trên mục tiêu dinh dưỡng và sở thích của bạn.
+                AI sẽ tạo kế hoạch ăn uống dựa trên mục tiêu dinh dưỡng, sở thích và thể trạng của bạn.
                 Đảm bảo bạn đã thiết lập mục tiêu trước khi tạo kế hoạch.
               </p>
             </div>
@@ -238,10 +279,39 @@ export default function GenerateMealPlanPage() {
               helperText="Lọc công thức theo tags"
             />
 
+            {/* Health Profile Section */}
+            <div className="p-4 bg-gray-50 rounded-xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <UtensilsCrossed className="w-5 h-5 text-gray-500" />
+                  <span className="font-medium text-gray-700">Thể trạng của bạn</span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsHealthProfileModalOpen(true)}
+                >
+                  {hasHealthProfileData ? 'Cập nhật thể trạng' : 'Nhập thể trạng'}
+                </Button>
+              </div>
+
+              {/* Display saved health profile */}
+              {hasHealthProfileData && healthProfile && (
+                <div className="bg-white rounded-lg p-3 border border-gray-100">
+                  <HealthProfileDisplay data={healthProfile} compact />
+                </div>
+              )}
+
+              {!hasHealthProfileData && (
+                <p className="text-sm text-gray-500 italic">
+                  Nhập thông tin thể trạng để AI đề xuất thực đơn phù hợp với bạn.
+                </p>
+              )}
+            </div>
+
             {/* Preferences Preview */}
             <div className="p-4 bg-gray-50 rounded-xl">
               <div className="flex items-center gap-2 mb-3">
-                <UtensilsCrossed className="w-5 h-5 text-gray-500" />
                 <span className="font-medium text-gray-700">Tùy chọn đã chọn:</span>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -254,6 +324,22 @@ export default function GenerateMealPlanPage() {
                   ))}
                 {formData.max_cook_time && (
                   <Badge variant="warning">Nấu &lt; {formData.max_cook_time} phút</Badge>
+                )}
+                {hasHealthProfileData && (
+                  <>
+                    {healthProfile?.food_allergies && healthProfile.food_allergies.length > 0 && (
+                      <Badge variant="danger">
+                        <AlertTriangle className="w-3 h-3 mr-1" />
+                        {healthProfile.food_allergies.length} dị ứng
+                      </Badge>
+                    )}
+                    {healthProfile?.dietary_preferences && healthProfile.dietary_preferences.length > 0 && (
+                      <Badge variant="success">
+                        <Heart className="w-3 h-3 mr-1" />
+                        {healthProfile.dietary_preferences.length} chế độ ăn
+                      </Badge>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -272,6 +358,16 @@ export default function GenerateMealPlanPage() {
         </Button>
       </div>
 
+      {/* Health Profile Modal */}
+      <HealthProfileModal
+        isOpen={isHealthProfileModalOpen}
+        onClose={() => setIsHealthProfileModalOpen(false)}
+        onSave={handleSaveHealthProfile}
+        initialData={healthProfile || undefined}
+        isLoading={saveHealthProfileMutation.isPending}
+      />
+
+      {/* Preview Modal */}
       <Modal
         isOpen={!!previewPlan}
         onClose={closePreview}

@@ -12,7 +12,7 @@ from datetime import date, timedelta
 import random
 import httpx
 import os
-import asyncio
+import re
 
 from app.models.user import UserGoal
 from app.models.recipe import Recipe, RecipeIngredient
@@ -25,35 +25,46 @@ from app.models.food import Food
 # ==========================================
 
 MOCK_BREAKFAST = [
-    {"name_vi": "Bánh mì trứng", "calories": 350, "protein": 15, "carbs": 40, "fat": 12},
-    {"name_vi": "Xôi gấc", "calories": 350, "protein": 8, "carbs": 55, "fat": 12},
-    {"name_vi": "Trứng chiên bánh mì", "calories": 320, "protein": 14, "carbs": 35, "fat": 14},
-    {"name_vi": "Cháo gà", "calories": 280, "protein": 18, "carbs": 35, "fat": 8},
-    {"name_vi": "Bánh đa cua", "calories": 380, "protein": 16, "carbs": 45, "fat": 14},
+    {"name_vi": "Bánh mì trứng", "calories": 350, "protein": 15, "carbs": 40, "fat": 12, "tags": ["breakfast", "egg"]},
+    {"name_vi": "Xôi gấc", "calories": 350, "protein": 8, "carbs": 55, "fat": 12, "tags": ["breakfast", "sticky_rice"]},
+    {"name_vi": "Trứng chiên bánh mì", "calories": 320, "protein": 14, "carbs": 35, "fat": 14, "tags": ["breakfast", "egg", "bread"]},
+    {"name_vi": "Cháo gà", "calories": 280, "protein": 18, "carbs": 35, "fat": 8, "tags": ["breakfast", "chicken", "porridge"]},
+    {"name_vi": "Bánh đa cua", "calories": 380, "protein": 16, "carbs": 45, "fat": 14, "tags": ["breakfast", "crab", "seafood"]},
+    {"name_vi": "Yến mạch cháo", "calories": 300, "protein": 10, "carbs": 50, "fat": 6, "tags": ["breakfast", "oatmeal", "healthy"]},
+    {"name_vi": "Trái cây dầm sữa", "calories": 200, "protein": 5, "carbs": 40, "fat": 3, "tags": ["breakfast", "fruit", "milk"]},
+    {"name_vi": "Bánh gai", "calories": 280, "protein": 8, "carbs": 45, "fat": 8, "tags": ["breakfast", "cake"]},
 ]
 
 MOCK_LUNCH = [
-    {"name_vi": "Cơm gà xối mỡ", "calories": 600, "protein": 30, "carbs": 70, "fat": 18},
-    {"name_vi": "Bún bò Huế", "calories": 550, "protein": 25, "carbs": 60, "fat": 20},
-    {"name_vi": "Mì Quảng", "calories": 580, "protein": 24, "carbs": 60, "fat": 22},
-    {"name_vi": "Phở bò", "calories": 500, "protein": 22, "carbs": 55, "fat": 16},
-    {"name_vi": "Hủ tiếu Mỹ Tho", "calories": 450, "protein": 18, "carbs": 52, "fat": 16},
+    {"name_vi": "Cơm gà xối mỡ", "calories": 600, "protein": 30, "carbs": 70, "fat": 18, "tags": ["lunch", "chicken", "rice"]},
+    {"name_vi": "Bún bò Huế", "calories": 550, "protein": 25, "carbs": 60, "fat": 20, "tags": ["lunch", "beef", "noodle"]},
+    {"name_vi": "Mì Quảng", "calories": 580, "protein": 24, "carbs": 60, "fat": 22, "tags": ["lunch", "seafood", "noodle"]},
+    {"name_vi": "Phở bò", "calories": 500, "protein": 22, "carbs": 55, "fat": 16, "tags": ["lunch", "beef", "noodle"]},
+    {"name_vi": "Hủ tiếu Mỹ Tho", "calories": 450, "protein": 18, "carbs": 52, "fat": 16, "tags": ["lunch", "noodle"]},
+    {"name_vi": "Cơm rang dưa cà", "calories": 450, "protein": 15, "carbs": 65, "fat": 14, "tags": ["lunch", "rice", "vegetable"]},
+    {"name_vi": "Bún chả Hà Nội", "calories": 520, "protein": 25, "carbs": 55, "fat": 18, "tags": ["lunch", "pork", "noodle"]},
+    {"name_vi": "Cơm tấm sườn bì chả", "calories": 580, "protein": 28, "carbs": 60, "fat": 20, "tags": ["lunch", "pork", "rice"]},
 ]
 
 MOCK_DINNER = [
-    {"name_vi": "Cá kho tộ", "calories": 380, "protein": 28, "carbs": 20, "fat": 18},
-    {"name_vi": "Thịt kho trứng", "calories": 400, "protein": 24, "carbs": 15, "fat": 25},
-    {"name_vi": "Gà rang gừng", "calories": 380, "protein": 30, "carbs": 15, "fat": 20},
-    {"name_vi": "Canh chua cá lóc", "calories": 220, "protein": 25, "carbs": 12, "fat": 8},
-    {"name_vi": "Rau muống xào tỏi + cơm", "calories": 280, "protein": 8, "carbs": 45, "fat": 6},
+    {"name_vi": "Cá kho tộ", "calories": 380, "protein": 28, "carbs": 20, "fat": 18, "tags": ["dinner", "fish", "seafood"]},
+    {"name_vi": "Thịt kho trứng", "calories": 400, "protein": 24, "carbs": 15, "fat": 25, "tags": ["dinner", "pork", "egg"]},
+    {"name_vi": "Gà rang gừng", "calories": 380, "protein": 30, "carbs": 15, "fat": 20, "tags": ["dinner", "chicken"]},
+    {"name_vi": "Canh chua cá lóc", "calories": 220, "protein": 25, "carbs": 12, "fat": 8, "tags": ["dinner", "fish", "soup"]},
+    {"name_vi": "Rau muống xào tỏi + cơm", "calories": 280, "protein": 8, "carbs": 45, "fat": 6, "tags": ["dinner", "vegetable", "rice"]},
+    {"name_vi": "Đậu phụ chiên giòn", "calories": 250, "protein": 15, "carbs": 10, "fat": 18, "tags": ["dinner", "tofu", "vegetarian"]},
+    {"name_vi": "Salad rau trộn", "calories": 180, "protein": 5, "carbs": 15, "fat": 12, "tags": ["dinner", "salad", "healthy"]},
+    {"name_vi": "Thịt bò xào rau", "calories": 350, "protein": 28, "carbs": 15, "fat": 20, "tags": ["dinner", "beef", "vegetable"]},
 ]
 
 MOCK_SNACK = [
-    {"name_vi": "Gỏi cuốn", "calories": 180, "protein": 12, "carbs": 20, "fat": 6},
-    {"name_vi": "Chả giò", "calories": 280, "protein": 15, "carbs": 25, "fat": 14},
-    {"name_vi": "Rau câu", "calories": 80, "protein": 2, "carbs": 18, "fat": 0},
-    {"name_vi": "Trái cây", "calories": 100, "protein": 1, "carbs": 22, "fat": 0},
-    {"name_vi": "Sữa chua", "calories": 120, "protein": 8, "carbs": 15, "fat": 4},
+    {"name_vi": "Gỏi cuốn", "calories": 180, "protein": 12, "carbs": 20, "fat": 6, "tags": ["snack", "vegetable"]},
+    {"name_vi": "Chả giò", "calories": 280, "protein": 15, "carbs": 25, "fat": 14, "tags": ["snack", "fried"]},
+    {"name_vi": "Rau câu", "calories": 80, "protein": 2, "carbs": 18, "fat": 0, "tags": ["snack", "dessert"]},
+    {"name_vi": "Trái cây", "calories": 100, "protein": 1, "carbs": 22, "fat": 0, "tags": ["snack", "fruit", "healthy"]},
+    {"name_vi": "Sữa chua", "calories": 120, "protein": 8, "carbs": 15, "fat": 4, "tags": ["snack", "dairy"]},
+    {"name_vi": "Hạt óc chó", "calories": 185, "protein": 4, "carbs": 4, "fat": 18, "tags": ["snack", "nuts", "healthy"]},
+    {"name_vi": "Táo", "calories": 95, "protein": 0, "carbs": 25, "fat": 0, "tags": ["snack", "fruit", "healthy"]},
 ]
 
 DEFAULT_DAILY_CALORIES = 2000
@@ -70,27 +81,26 @@ DEFAULT_MEAL_DISTRIBUTION = {
 # ==========================================
 
 # Goal-specific meal calorie distributions (as percentage of daily total)
-# Based on nutrition science and goal optimization
 MEAL_DISTRIBUTIONS = {
     "weight_loss": {
-        "breakfast": Decimal("0.30"),  # 30% - Higher morning for metabolism
-        "lunch": Decimal("0.35"),      # 35% - Main meal when active
-        "dinner": Decimal("0.25"),     # 25% - Lower evening to avoid fat storage
-        "snack": Decimal("0.10")       # 10% - Fill gaps
+        "breakfast": Decimal("0.30"),
+        "lunch": Decimal("0.35"),
+        "dinner": Decimal("0.25"),
+        "snack": Decimal("0.10")
     },
-    "weight_gain": {  # For muscle gain / bulking
-        "breakfast": Decimal("0.25"),  # 25% - Moderate start
-        "lunch": Decimal("0.30"),      # 30% - Fuel for workout
-        "dinner": Decimal("0.35"),     # 35% - Post-workout recovery
-        "snack": Decimal("0.10")       # 10% - Pre/post workout
+    "weight_gain": {
+        "breakfast": Decimal("0.25"),
+        "lunch": Decimal("0.30"),
+        "dinner": Decimal("0.35"),
+        "snack": Decimal("0.10")
     },
     "maintain": {
-        "breakfast": Decimal("0.25"),  # 25% - Standard
-        "lunch": Decimal("0.35"),      # 35% - Standard
-        "dinner": Decimal("0.30"),     # 30% - Standard
-        "snack": Decimal("0.10")       # 10% - Standard
+        "breakfast": Decimal("0.25"),
+        "lunch": Decimal("0.35"),
+        "dinner": Decimal("0.30"),
+        "snack": Decimal("0.10")
     },
-    "healthy_lifestyle": {  # For general health
+    "healthy_lifestyle": {
         "breakfast": Decimal("0.25"),
         "lunch": Decimal("0.35"),
         "dinner": Decimal("0.30"),
@@ -105,11 +115,112 @@ MEAL_DISTRIBUTIONS = {
 }
 
 # Variety tracking constants
-VARIETY_LOOKBACK_DAYS = 3  # Don't repeat recipes from last 3 days
+VARIETY_LOOKBACK_DAYS = 3
 
 # Decimal constants
 DECIMAL_0 = Decimal("0")
 DECIMAL_100 = Decimal("100")
+
+
+# ==========================================
+# ALLERGEN SYNONYMS MAPPING
+# ==========================================
+
+# Map Vietnamese allergen names to English keywords and related terms
+ALLERGEN_SYNONYMS = {
+    "hải sản": ["seafood", "shrimp", "crab", "fish", "tôm", "cua", "cá", "mực", "ngao", "sò", "hàu", "tôm hùm", "tôm càng", " calamari", "squid"],
+    "tôm": ["shrimp", "prawn", "tôm", "tôm rang", "tôm hấp", "tôm chiên", "tôm nướng", "tôm sú", "tôm thẻ"],
+    "cua": ["crab", "cua", "cua biển", "cua đồng"],
+    "cá": ["fish", "cá", "cá kho", "cá chiên", "canh cá", "cá lóc", "cá thu", "cá hồi", "cá ngừ", "cá basa"],
+    "đậu phộng": ["peanut", "đậu phộng", "lạc", "đậu phộng rang", "peanuts"],
+    "đậu nành": ["soy", "soybean", "đậu nành", "đậu", "sữa đậu nành", "tofu", "đậu phụ"],
+    "gluten": ["gluten", "wheat", "bột mì", "mì", "bánh mì", "wheat flour", "bread", "noodle", "pasta"],
+    "sữa": ["milk", "sữa", "cheese", "phô mai", "yogurt", "sữa chua", "dairy", "cream", "butter"],
+    "trứng": ["egg", "trứng", "egg white", "trứng gà", "trứng vịt"],
+    "đậu": ["bean", "đậu", "đậu xanh", "đậu đen", "đậu đỏ", "đậu nành", "bean sprout", "giá đậu"],
+    "ngô": ["corn", "ngô", "bắp", "corn starch"],
+    "hạt": ["nut", "nuts", "hạt", "hạt điều", "hạt dẻ", "hạt bí", "hạt hướng dương"],
+    "óc chó": ["walnut", "óc chó", "walnuts"],
+    "hạnh nhân": ["almond", "hạnh nhân", "almonds"],
+    "bột mì": ["wheat flour", "bột mì", "flour", "bánh mì", "mì", "pasta", "bread"],
+    "thịt bò": ["beef", "bò", "steak", "thịt bò", "bò bít tết", "bò viên"],
+    "thịt gà": ["chicken", "gà", "thịt gà", "chicken breast", "gà rang", "gà xào", "gà hấp"],
+    "thịt heo": ["pork", "heo", "thịt heo", "thịt lợn", "pork belly", "thịt xá xíu"],
+}
+
+
+# ==========================================
+# HEALTH CONDITIONS → TAGS MAPPING
+# ==========================================
+
+HEALTH_CONDITION_TAGS = {
+    "tiểu đường": ["low_sugar", "low_carb", "high_fiber", "diabetic_friendly"],
+    "tiểu đường type 1": ["low_sugar", "low_carb", "high_fiber", "diabetic_friendly"],
+    "tiểu đường type 2": ["low_sugar", "low_carb", "high_fiber", "diabetic_friendly"],
+    "diabetes": ["low_sugar", "low_carb", "high_fiber", "diabetic_friendly"],
+    "huyết áp cao": ["low_sodium", "heart_healthy", "dash"],
+    "huyết áp thấp": ["normal_sodium", "heart_healthy"],
+    "hypertension": ["low_sodium", "heart_healthy", "dash"],
+    "bệnh tim mạch": ["heart_healthy", "low_fat", "low_cholesterol"],
+    "tim mạch": ["heart_healthy", "low_fat", "low_cholesterol"],
+    "heart": ["heart_healthy", "low_fat", "low_cholesterol"],
+    "cholesterol cao": ["low_cholesterol", "low_fat"],
+    "mỡ máu": ["low_cholesterol", "low_fat"],
+    "cholesterol": ["low_cholesterol", "low_fat"],
+    "gan nhiễm mỡ": ["low_fat", "detox", "low_sugar"],
+    "fatty liver": ["low_fat", "detox", "low_sugar"],
+    "viêm khớp": ["anti_inflammatory", "low_fat"],
+    "arthritis": ["anti_inflammatory", "low_fat"],
+    "loãng xương": ["high_calcium", "high_protein"],
+    "osteoporosis": ["high_calcium", "high_protein"],
+    "suy thận": ["low_sodium", "low_protein", "low_potassium"],
+    "kidney": ["low_sodium", "low_protein", "low_potassium"],
+    "hen suyễn": ["anti_inflammatory"],
+    "asthma": ["anti_inflammatory"],
+    "dị ứng": [],  # Generic - rely on specific allergies
+}
+
+
+# ==========================================
+# DIETARY PREFERENCES → RULES MAPPING
+# ==========================================
+
+# Tags to AVOID for each preference
+DIETARY_PREFERENCE_RESTRICTIONS = {
+    "low carb": ["rice", "com", "bún", "bánh", "mì", "phở", "bánh mì", "xôi", "noodle", "bread", "sticky rice"],
+    "keto": ["rice", "com", "bún", "bánh", "mì", "phở", "bánh mì", "xôi", "noodle", "bread", "sticky rice", "sugar", "đường"],
+    "eat clean": ["fried", "chiên", "rán", "processed"],
+    "vegetarian": ["chicken", "beef", "pork", "fish", "seafood", "thịt", "bò", "heo", "gà", "cá", "hải sản", "meat"],
+    "vegan": ["chicken", "beef", "pork", "fish", "seafood", "egg", "milk", "dairy", "cheese", "honey", "thịt", "bò", "heo", "gà", "cá", "hải sản", "trứng", "sữa", "thịt", "meat"],
+    "paleo": ["grain", "legume", "đậu", "bean", "rice", "bread", "bánh", "mì"],
+    "mediterranean": [],  # Just preference, no hard restrictions
+    "dash": ["low_sodium", "heart_healthy"],  # Already low sodium
+    "low fat": ["fried", "chiên", "rán", "fat", "mỡ"],
+    "low sodium": ["salted", "mắm", "muối", "đồ chế biến", "processed"],
+    "high protein": ["high_protein"],  # Just preference
+    "high fiber": ["high_fiber", "fiber"],  # Just preference
+    "gluten free": ["wheat", "gluten", "bột mì", "bánh mì", "mì", "bread", "flour"],
+    "sugar free": ["sugar", "đường", "dessert", "bánh", "kẹo"],
+    "raw food": ["cooked", "nấu", "chiên", "fried", "grilled"],
+}
+
+# Tags to INCLUDE/PREFER for each preference
+DIETARY_PREFERENCE_INCLUDES = {
+    "low carb": ["vegetable", "salad", "meat", "fish", "egg"],
+    "keto": ["vegetable", "meat", "fish", "egg", "fat", "avocado"],
+    "eat clean": ["healthy", "vegetable", "fruit", "grilled", "steamed"],
+    "vegetarian": ["vegetable", "tofu", "bean", "fruit"],
+    "vegan": ["vegetable", "fruit", "tofu", "bean"],
+    "mediterranean": ["olive oil", "fish", "vegetable", "whole grain"],
+    "dash": ["vegetable", "fruit", "low_sodium"],
+    "low fat": ["grilled", "steamed", "boiled", "vegetable"],
+    "low sodium": ["fresh", "vegetable", "fruit", "homemade"],
+    "high protein": ["chicken", "beef", "fish", "egg", "tofu"],
+    "high fiber": ["vegetable", "fruit", "whole grain", "bean"],
+    "gluten free": ["rice", "vegetable", "fruit", "tuber"],
+    "sugar free": ["vegetable", "protein", "unsweetened"],
+    "raw food": ["fruit", "vegetable", "salad", "raw"],
+}
 
 
 def round_2(value: Decimal) -> Decimal:
@@ -120,11 +231,235 @@ def round_2(value: Decimal) -> Decimal:
 
 
 # ==========================================
-# MAIN GENERATION FUNCTION
+# HEALTH PROFILE HELPER FUNCTIONS
 # ==========================================
 
+def _normalize_text(text: str) -> str:
+    """Normalize text for comparison (lowercase, remove accents)"""
+    import unicodedata
+    text = text.lower().strip()
+    # Remove accents
+    text = unicodedata.normalize('NFD', text)
+    text = ''.join(c for c in text if unicodedata.category(c) != 'Mn')
+    return text
+
+
+def _get_all_allergen_keywords(allergens: List[str]) -> Set[str]:
+    """Get all keywords to check for allergens including synonyms"""
+    keywords = set()
+    normalized_allergens = [_normalize_text(a) for a in allergens]
+    
+    for allergen in normalized_allergens:
+        keywords.add(allergen)
+        # Check if this allergen has synonyms
+        for key, synonyms in ALLERGEN_SYNONYMS.items():
+            if key in allergen or allergen in key:
+                keywords.update([_normalize_text(s) for s in synonyms])
+    
+    return keywords
+
+
+def _check_allergen_in_recipe(recipe: Recipe, db: Session, allergens: List[str]) -> bool:
+    """
+    Check if recipe contains any of the specified allergens.
+    Uses synonym expansion for better matching.
+    Returns True if allergen is found, False otherwise.
+    """
+    if not allergens:
+        return False
+    
+    # Get all keywords to check (including synonyms)
+    allergen_keywords = _get_all_allergen_keywords(allergens)
+    
+    # Check recipe name
+    recipe_name_normalized = _normalize_text(recipe.name_vi or "")
+    for keyword in allergen_keywords:
+        if keyword in recipe_name_normalized:
+            print(f"   ⚠️ Allergen '{keyword}' found in recipe name: {recipe.name_vi}")
+            return True
+    
+    # Check recipe tags
+    if recipe.tags:
+        for tag in recipe.tags:
+            tag_normalized = _normalize_text(tag)
+            for keyword in allergen_keywords:
+                if keyword in tag_normalized:
+                    print(f"   ⚠️ Allergen '{keyword}' found in recipe tag: {tag}")
+                    return True
+    
+    # Check ingredients
+    for ingredient in recipe.ingredients:
+        ingredient_name_normalized = _normalize_text(ingredient.ingredient_name or "")
+        for keyword in allergen_keywords:
+            if keyword in ingredient_name_normalized:
+                print(f"   ⚠️ Allergen '{keyword}' found in ingredient: {ingredient.ingredient_name}")
+                return True
+    
+    return False
+
+
+def _check_allergen_in_mock_dish(dish: Dict, allergens: List[str]) -> bool:
+    """Check if mock dish contains any allergens"""
+    if not allergens:
+        return False
+    
+    allergen_keywords = _get_all_allergen_keywords(allergens)
+    dish_name_normalized = _normalize_text(dish.get("name_vi", ""))
+    
+    for keyword in allergen_keywords:
+        if keyword in dish_name_normalized:
+            return True
+    
+    # Check tags
+    dish_tags = dish.get("tags", [])
+    for tag in dish_tags:
+        tag_normalized = _normalize_text(tag)
+        for keyword in allergen_keywords:
+            if keyword in tag_normalized:
+                return True
+    
+    return False
+
+
+def _check_dietary_restrictions_in_recipe(recipe: Recipe, dietary_preferences: List[str]) -> bool:
+    """
+    Check if recipe violates dietary preferences.
+    Returns True if recipe violates any restriction, False if OK.
+    """
+    if not dietary_preferences:
+        return False
+    
+    normalized_prefs = [_normalize_text(p) for p in dietary_preferences]
+    
+    # Get all restricted keywords
+    restricted_keywords = set()
+    for pref in normalized_prefs:
+        pref_key = pref.lower()
+        if pref_key in DIETARY_PREFERENCE_RESTRICTIONS:
+            restricted_keywords.update([_normalize_text(r) for r in DIETARY_PREFERENCE_RESTRICTIONS[pref_key]])
+    
+    if not restricted_keywords:
+        return False
+    
+    # Check recipe name
+    recipe_name_normalized = _normalize_text(recipe.name_vi or "")
+    for keyword in restricted_keywords:
+        if keyword in recipe_name_normalized:
+            print(f"   ⚠️ Dietary restriction '{keyword}' found in recipe name: {recipe.name_vi}")
+            return True
+    
+    # Check recipe tags
+    if recipe.tags:
+        for tag in recipe.tags:
+            tag_normalized = _normalize_text(tag)
+            for keyword in restricted_keywords:
+                if keyword in tag_normalized:
+                    print(f"   ⚠️ Dietary restriction '{keyword}' found in recipe tag: {tag}")
+                    return True
+    
+    return False
+
+
+def _check_dietary_restrictions_in_mock_dish(dish: Dict, dietary_preferences: List[str]) -> bool:
+    """Check if mock dish violates dietary preferences"""
+    if not dietary_preferences:
+        return False
+    
+    normalized_prefs = [_normalize_text(p) for p in dietary_preferences]
+    
+    # Get all restricted keywords
+    restricted_keywords = set()
+    for pref in normalized_prefs:
+        pref_key = pref.lower()
+        if pref_key in DIETARY_PREFERENCE_RESTRICTIONS:
+            restricted_keywords.update([_normalize_text(r) for r in DIETARY_PREFERENCE_RESTRICTIONS[pref_key]])
+    
+    if not restricted_keywords:
+        return False
+    
+    # Check dish name
+    dish_name_normalized = _normalize_text(dish.get("name_vi", ""))
+    for keyword in restricted_keywords:
+        if keyword in dish_name_normalized:
+            return True
+    
+    # Check tags
+    dish_tags = dish.get("tags", [])
+    for tag in dish_tags:
+        tag_normalized = _normalize_text(tag)
+        for keyword in restricted_keywords:
+            if keyword in tag_normalized:
+                return True
+    
+    return False
+
+
+def _suggest_tags_from_health_conditions(health_conditions: List[str]) -> List[str]:
+    """
+    Suggest additional dietary tags based on health conditions.
+    """
+    suggested_tags = set()
+    
+    for condition in health_conditions:
+        condition_normalized = _normalize_text(condition)
+        
+        # Check all health conditions
+        for key, tags in HEALTH_CONDITION_TAGS.items():
+            if key in condition_normalized or condition_normalized in key:
+                suggested_tags.update(tags)
+    
+    return list(suggested_tags)
+
+
+def _score_recipe_for_preferences(recipe: Recipe, dietary_preferences: List[str], health_conditions: List[str] = None) -> float:
+    """
+    Score a recipe based on how well it matches dietary preferences and health conditions.
+    Returns a score from 0 to 1, where 1 is the best match.
+    Higher weight for strict dietary requirements.
+    """
+    score = 0.0
+    max_score = 0.0
+    
+    # Combine dietary preferences and health condition tags
+    all_preferences = list(dietary_preferences or [])
+    if health_conditions:
+        all_preferences.extend(_suggest_tags_from_health_conditions(health_conditions))
+    
+    if not all_preferences:
+        return 0.5
+    
+    # Normalize preferences
+    normalized_prefs = [_normalize_text(p) for p in all_preferences]
+    
+    # Check recipe tags for preference matches
+    if recipe.tags:
+        for pref in normalized_prefs:
+            for tag in recipe.tags:
+                tag_normalized = _normalize_text(tag)
+                # Exact match gets higher score
+                if pref == tag_normalized:
+                    score += 3.0
+                elif pref in tag_normalized or tag_normalized in pref:
+                    score += 2.0
+                max_score += 3.0
+    
+    # Check recipe name
+    recipe_name = _normalize_text(recipe.name_vi or "")
+    for pref in normalized_prefs:
+        if pref == recipe_name:
+            score += 2.0
+        elif pref in recipe_name or recipe_name in pref:
+            score += 1.0
+        max_score += 2.0
+    
+    if max_score > 0:
+        return min(1.0, score / max_score)
+    
+    return 0.5
+
+
 # ==========================================
-# HELPER FUNCTIONS
+# MAIN GENERATION FUNCTION
 # ==========================================
 
 def _get_mock_meal_plan(
@@ -132,12 +467,59 @@ def _get_mock_meal_plan(
     user_id: UUID,
     plan_name: str,
     days: int,
-    goal_type: str = "maintain"
+    goal_type: str = "maintain",
+    health_profile: Optional[Dict] = None
 ) -> MealPlan:
     """
-    Tạo kế hoạch ăn từ dữ liệu mock - ĐÃ SỬA: phân biệt rõ bữa ăn.
+    Tạo kế hoạch ăn từ dữ liệu mock - CÓ FILTER theo health profile.
     Mỗi ngày: 1 breakfast + 1 lunch + 1 dinner + có thể 1 snack
     """
+    # Extract health profile data
+    food_allergies = health_profile.get("food_allergies", []) if health_profile else []
+    dietary_preferences = health_profile.get("dietary_preferences", []) if health_profile else []
+    health_conditions = health_profile.get("health_conditions", []) if health_profile else []
+    
+    # Get suggested tags from health conditions
+    suggested_tags = _suggest_tags_from_health_conditions(health_conditions)
+    all_preferences = list(set(dietary_preferences + suggested_tags))
+    
+    if health_profile:
+        print(f"🏥 Mock generation with health profile:")
+        print(f"   - Allergies to avoid: {food_allergies}")
+        print(f"   - Dietary preferences: {all_preferences}")
+    
+    # Filter mock data
+    def is_valid_dish(dish: Dict) -> bool:
+        # Check allergens
+        if food_allergies and _check_allergen_in_mock_dish(dish, food_allergies):
+            return False
+        # Check dietary restrictions
+        if all_preferences and _check_dietary_restrictions_in_mock_dish(dish, all_preferences):
+            return False
+        return True
+    
+    # Filter each meal category
+    valid_breakfast = [d for d in MOCK_BREAKFAST if is_valid_dish(d)]
+    valid_lunch = [d for d in MOCK_LUNCH if is_valid_dish(d)]
+    valid_dinner = [d for d in MOCK_DINNER if is_valid_dish(d)]
+    valid_snack = [d for d in MOCK_SNACK if is_valid_dish(d)]
+    
+    # Fallback to original if all filtered out
+    if not valid_breakfast:
+        valid_breakfast = MOCK_BREAKFAST
+        print("⚠️ No valid breakfast after filtering, using all")
+    if not valid_lunch:
+        valid_lunch = MOCK_LUNCH
+        print("⚠️ No valid lunch after filtering, using all")
+    if not valid_dinner:
+        valid_dinner = MOCK_DINNER
+        print("⚠️ No valid dinner after filtering, using all")
+    if not valid_snack:
+        valid_snack = MOCK_SNACK
+        print("⚠️ No valid snack after filtering, using all")
+    
+    print(f"📋 Valid dishes after filtering: {len(valid_breakfast)} breakfast, {len(valid_lunch)} lunch, {len(valid_dinner)} dinner, {len(valid_snack)} snack")
+    
     start_date = date.today()
     end_date = start_date + timedelta(days=days - 1)
 
@@ -148,7 +530,7 @@ def _get_mock_meal_plan(
         start_date=start_date,
         end_date=end_date,
         servings=1,
-        preferences={},
+        preferences={"health_profile": health_profile} if health_profile else {},
         is_active=True,
         is_completed=False
     )
@@ -157,12 +539,11 @@ def _get_mock_meal_plan(
     for day_offset in range(days):
         current_date = start_date + timedelta(days=day_offset)
         
-        # Chọn ngẫu nhiên 1 món từ mỗi bữa
-        breakfast_item = random.choice(MOCK_BREAKFAST)
-        lunch_item = random.choice(MOCK_LUNCH)
-        dinner_item = random.choice(MOCK_DINNER)
+        # Chọn ngẫu nhiên 1 món từ mỗi bữa đã filter
+        breakfast_item = random.choice(valid_breakfast)
+        lunch_item = random.choice(valid_lunch)
+        dinner_item = random.choice(valid_dinner)
         
-        # Thứ tự: breakfast=0, lunch=1, dinner=2, snack=3
         order_index = 0
         
         # Breakfast
@@ -224,7 +605,7 @@ def _get_mock_meal_plan(
         
         # Snack (có 50% khả năng có)
         if random.random() > 0.5:
-            snack_item = random.choice(MOCK_SNACK)
+            snack_item = random.choice(valid_snack)
             item = MealPlanItem(
                 meal_plan_id=meal_plan.plan_id,
                 food_id=None,
@@ -244,7 +625,7 @@ def _get_mock_meal_plan(
 
     db.commit()
     db.refresh(meal_plan)
-    print(f"✅ Đã tạo mock meal plan: {meal_plan.plan_id} - Đúng cấu trúc bữa ăn!")
+    print(f"✅ Đã tạo mock meal plan: {meal_plan.plan_id} với filter health profile!")
     return meal_plan
 
 
@@ -253,15 +634,16 @@ def generate_meal_plan(
     user_id: UUID,
     plan_name: str,
     days: int = 7,
-    preferences: Optional[Dict] = None
+    preferences: Optional[Dict] = None,
+    health_profile: Optional[Dict] = None
 ) -> MealPlan:
     """
     Generate intelligent meal plan - TÍCH HỢP AI.
     
     ALGORITHM:
-    1. Thử gọi AI service (Gemini) nếu có
+    1. Thử gọi AI service (Gemini) nếu có health_profile
     2. Fallback: dùng recipe từ database nếu có
-    3. Fallback cuối: dùng mock data đã sửa (đúng cấu trúc bữa ăn)
+    3. Fallback cuối: dùng mock data đã filter theo health profile
     
     Args:
         db: Database session
@@ -269,15 +651,25 @@ def generate_meal_plan(
         plan_name: Name for the meal plan
         days: Number of days (default 7)
         preferences: Optional filters
+        health_profile: Optional health profile
+            - health_conditions: List[str]
+            - food_allergies: List[str]
+            - dietary_preferences: List[str]
     
     Returns:
         Generated MealPlan with MealPlanItems
     """
     
+    # Log health profile if provided
+    if health_profile:
+        print(f"🏥 Health profile provided - conditions={health_profile.get('health_conditions', [])}, "
+               f"allergies={health_profile.get('food_allergies', [])}, "
+               f"preferences={health_profile.get('dietary_preferences', [])}")
+    
     # 1. Get user's active goal
     goal = db.query(UserGoal).filter(
         UserGoal.user_id == user_id,
-        UserGoal.is_active == True
+        UserGoal.is_deleted == False
     ).first()
 
     # 2. Check if recipes exist in database
@@ -287,33 +679,24 @@ def generate_meal_plan(
         Recipe.calories_per_serving.isnot(None)
     ).count()
 
-    # 3. Try AI first, then recipe-based, then mock
+    # 3. Determine generation method
     if goal and goal.daily_calorie_target:
         goal_type = goal.goal_type or "maintain"
         
-        # Try AI service
-        try:
-            print(f"🤖 Attempting AI-powered meal plan generation...")
-            return asyncio.run(_generate_with_ai(
-                db, user_id, plan_name, days, goal, preferences
-            ))
-        except Exception as e:
-            print(f"⚠️ AI service failed: {e}")
-        
-        # Fallback: Recipe-based generation
+        # Recipe-based generation
         if recipe_count > 0:
-            print(f"📋 Using recipe-based generation...")
+            print(f"📋 Using recipe-based generation ({recipe_count} recipes available)...")
             return _generate_with_recipes(
-                db, user_id, plan_name, days, goal, preferences
+                db, user_id, plan_name, days, goal, preferences, health_profile
             )
         
-        # Final fallback: Mock data
-        print(f"⚠️ Using mock data fallback...")
-        return _get_mock_meal_plan(db, user_id, plan_name, days, goal_type)
+        # Mock data fallback WITH health profile filter
+        print(f"⚠️ No recipes in database, using mock data with health profile filter...")
+        return _get_mock_meal_plan(db, user_id, plan_name, days, goal_type, health_profile)
     
-    # No goal - use mock with default
-    print(f"⚠️ No goal found, using mock data...")
-    return _get_mock_meal_plan(db, user_id, plan_name, days, "maintain")
+    # No goal - use mock with health profile filter
+    print(f"⚠️ No goal found, using mock data with health profile filter...")
+    return _get_mock_meal_plan(db, user_id, plan_name, days, "maintain", health_profile)
 
 
 def _generate_with_recipes(
@@ -322,11 +705,12 @@ def _generate_with_recipes(
     plan_name: str,
     days: int,
     goal,
-    preferences: Optional[Dict] = None
+    preferences: Optional[Dict] = None,
+    health_profile: Optional[Dict] = None
 ) -> MealPlan:
     """
     Generate meal plan using recipes from database.
-    Fallback khi AI service không khả dụng.
+    Fully respects health profile (allergies, conditions, preferences).
     """
     from app.services.meal_plan_service import create_meal_plan
     from app.schemas.meal_plan import MealPlanCreate
@@ -334,6 +718,21 @@ def _generate_with_recipes(
     daily_calories = Decimal(str(goal.daily_calorie_target))
     goal_type_key = goal.goal_type if goal.goal_type in MEAL_DISTRIBUTIONS else "default"
     meal_distribution = MEAL_DISTRIBUTIONS[goal_type_key]
+    
+    # Extract health profile data
+    food_allergies = health_profile.get("food_allergies", []) if health_profile else []
+    dietary_preferences = health_profile.get("dietary_preferences", []) if health_profile else []
+    health_conditions = health_profile.get("health_conditions", []) if health_profile else []
+    
+    # Suggest additional tags from health conditions
+    suggested_tags = _suggest_tags_from_health_conditions(health_conditions)
+    all_preferences_tags = list(set(dietary_preferences + suggested_tags))
+    
+    if health_profile:
+        print(f"🏥 Health profile: {len(food_allergies)} allergens, {len(dietary_preferences)} preferences, {len(health_conditions)} conditions")
+        print(f"📋 All preference tags (including from conditions): {all_preferences_tags}")
+        if food_allergies:
+            print(f"🚫 ALLERGENS TO AVOID: {food_allergies}")
     
     print(f"🎯 Using {goal_type_key} distribution: {dict(meal_distribution)}")
     
@@ -347,12 +746,17 @@ def _generate_with_recipes(
     start_date = date.today()
     end_date = start_date + timedelta(days=days - 1)
     
+    # Store health profile in preferences
+    plan_preferences = preferences.copy() if preferences else {}
+    if health_profile:
+        plan_preferences["health_profile"] = health_profile
+    
     meal_plan_data = MealPlanCreate(
         plan_name=plan_name,
         start_date=start_date,
         end_date=end_date,
         servings=1,
-        preferences=preferences or {}
+        preferences=plan_preferences
     )
     
     meal_plan = create_meal_plan(db, user_id, meal_plan_data)
@@ -387,10 +791,14 @@ def _generate_with_recipes(
                 goal_type=goal.goal_type,
                 preferences=preferences,
                 exclude_recipe_ids=exclude_recent,
-                tolerance=0.25
+                tolerance=0.25,
+                food_allergies=food_allergies,
+                dietary_preferences=all_preferences_tags,
+                health_conditions=health_conditions
             )
             
             if not recipe:
+                print(f"   ⚠️ No valid recipe found for {meal_type}")
                 continue
             
             quantity = _calculate_quantity(
@@ -428,7 +836,10 @@ def _generate_with_recipes(
             print(f"   ✅ {meal_type}: {recipe.name_vi}")
     
     db.commit()
+    # Force reload items relationship
     db.refresh(meal_plan)
+    # Access items to ensure they're loaded
+    _ = meal_plan.items
     
     # Variety statistics
     unique_recipes = len(recipe_frequency)
@@ -451,20 +862,24 @@ def _find_matching_recipe(
     goal_type: str,
     preferences: Optional[Dict],
     exclude_recipe_ids: Set[UUID],
-    tolerance: float = 0.2
+    tolerance: float = 0.2,
+    food_allergies: Optional[List[str]] = None,
+    dietary_preferences: Optional[List[str]] = None,
+    health_conditions: Optional[List[str]] = None
 ) -> Optional[Recipe]:
     """
-    Find recipe matching calorie target and preferences
-    
+    Find recipe matching calorie target and health profile requirements.
+
     STRATEGY:
     1. Calculate calorie range (target ± tolerance)
     2. Filter recipes by:
        - Calorie range
-       - Not in excluded list
-       - User preferences (categories, tags, cook time)
-    3. Prioritize verified recipes
-    4. Randomly select from top matches for variety
-    
+       - NOT in excluded list
+       - NOT containing allergens (CRITICAL - STRICT)
+       - NOT violating dietary restrictions
+    3. Prioritize recipes matching dietary preferences
+    4. Score based on preference match
+
     Args:
         db: Database session
         target_calories: Target calories for this meal
@@ -473,7 +888,10 @@ def _find_matching_recipe(
         preferences: User preferences (categories, tags, etc.)
         exclude_recipe_ids: Already used recipe IDs
         tolerance: Calorie tolerance (0.2 = ±20%)
-    
+        food_allergies: List of allergens to EXCLUDE (STRICT)
+        dietary_preferences: List of dietary preferences to prioritize
+        health_conditions: List of health conditions
+
     Returns:
         Matching Recipe or None if not found
     """
@@ -495,7 +913,7 @@ def _find_matching_recipe(
     if exclude_recipe_ids:
         query = query.filter(~Recipe.recipe_id.in_(exclude_recipe_ids))
     
-    # Apply user preferences
+    # Apply user preferences from form
     if preferences:
         # Filter by categories
         if preferences.get("categories"):
@@ -512,20 +930,55 @@ def _find_matching_recipe(
                 (Recipe.prep_time_minutes + Recipe.cook_time_minutes) <= max_time
             )
     
-    # Prioritize verified recipes
-    query = query.order_by(
-        Recipe.is_verified.desc(),
-        Recipe.favorite_count.desc()
-    )
+    # Get candidate recipes
+    candidates = query.limit(100).all()
     
-    # Get top candidates
-    recipes = query.limit(10).all()
-    
-    if not recipes:
+    if not candidates:
+        print(f"⚠️ No recipes found in calorie range {min_calories:.0f}-{max_calories:.0f} for {meal_type}")
         return None
     
-    # Randomly select for variety
-    return random.choice(recipes)
+    print(f"📋 Found {len(candidates)} candidates for {meal_type}")
+    
+    # Filter and score
+    valid_recipes = []
+    
+    for recipe in candidates:
+        # CRITICAL: Check allergens - STRICT EXCLUSION
+        if food_allergies and _check_allergen_in_recipe(recipe, db, food_allergies):
+            continue
+        
+        # Check dietary restrictions - VIOLATION = EXCLUDE
+        if dietary_preferences and _check_dietary_restrictions_in_recipe(recipe, dietary_preferences):
+            continue
+        
+        # Score for preference matching
+        score = _score_recipe_for_preferences(recipe, dietary_preferences or [], health_conditions)
+        valid_recipes.append((score, recipe))
+    
+    if not valid_recipes:
+        print(f"⚠️ No recipes found after health profile filtering for {meal_type}")
+        print(f"   Tried to avoid: {food_allergies}")
+        print(f"   Tried to respect: {dietary_preferences}")
+        return None
+    
+    # Sort by score (descending)
+    valid_recipes.sort(key=lambda x: x[0], reverse=True)
+    
+    print(f"✅ Found {len(valid_recipes)} valid recipes after filtering")
+    
+    # Prioritize verified recipes from top scored
+    verified_recipes = [r for score, r in valid_recipes if r.is_verified]
+    non_verified_recipes = [r for score, r in valid_recipes if not r.is_verified]
+    
+    # Return verified if available, otherwise from top scored
+    if verified_recipes:
+        # Return best verified recipe (not random, since we need to respect health profile)
+        return verified_recipes[0]
+    
+    if non_verified_recipes:
+        return non_verified_recipes[0]
+    
+    return None
 
 
 def _calculate_quantity(
@@ -537,17 +990,6 @@ def _calculate_quantity(
     
     Formula: quantity = target_calories / recipe_calories
     Rounds to nearest 0.5 for practical serving sizes
-    
-    Args:
-        recipe_calories: Calories per serving of recipe
-        target_calories: Target calories for meal
-    
-    Returns:
-        Number of servings (rounded to 0.5)
-    
-    Examples:
-        recipe_calories=300, target=450 → 1.5 servings
-        recipe_calories=250, target=500 → 2.0 servings
     """
     
     if recipe_calories <= 0:
@@ -569,29 +1011,6 @@ def generate_shopping_list(
 ) -> Dict[str, List[Dict]]:
     """
     Generate shopping list from meal plan
-    
-    ALGORITHM:
-    1. Get all meal plan items
-    2. Extract recipe names from notes
-    3. For each recipe:
-       - Get ingredients
-       - Multiply by item quantity
-       - Accumulate by ingredient name + unit
-    4. Group by food category
-    
-    Args:
-        meal_plan_id: Meal plan UUID
-    
-    Returns:
-        Dictionary grouped by category:
-        {
-            "Vegetables": [
-                {"name": "Carrot", "quantity": 500, "unit": "gram"},
-                {"name": "Tomato", "quantity": 3, "unit": "pieces"}
-            ],
-            "Meat": [...],
-            ...
-        }
     """
     
     # Get meal plan items
@@ -679,41 +1098,6 @@ def analyze_meal_plan(
 ) -> Dict:
     """
     Analyze meal plan nutrition and balance
-    
-    ANALYSIS:
-    1. Daily averages (calories, protein, carbs, fat)
-    2. Macro distribution (% from protein, carbs, fat)
-    3. Meal balance (count by type)
-    4. Variety score (unique recipes / total meals)
-    
-    Args:
-        meal_plan_id: Meal plan UUID
-    
-    Returns:
-        Analysis report with:
-        {
-            "plan_name": str,
-            "days": int,
-            "total_meals": int,
-            "daily_averages": {
-                "calories": float,
-                "protein_g": float,
-                "carbs_g": float,
-                "fat_g": float
-            },
-            "macro_distribution": {
-                "protein_percent": float,
-                "carbs_percent": float,
-                "fat_percent": float
-            },
-            "meal_balance": {
-                "breakfast": int,
-                "lunch": int,
-                ...
-            },
-            "variety_score": float,
-            "unique_recipes": int
-        }
     """
     
     meal_plan = db.query(MealPlan).filter(
@@ -742,8 +1126,7 @@ def analyze_meal_plan(
     avg_daily_carbs = total_carbs / total_days
     avg_daily_fat = total_fat / total_days
     
-    # Calculate macro distribution (calories from each macro)
-    # Protein: 4 cal/g, Carbs: 4 cal/g, Fat: 9 cal/g
+    # Calculate macro distribution
     protein_calories = total_protein * 4
     carbs_calories = total_carbs * 4
     fat_calories = total_fat * 9
@@ -795,27 +1178,11 @@ def regenerate_day(
     db: Session,
     meal_plan_id: UUID,
     target_date: date,
-    preferences: Optional[Dict] = None
+    preferences: Optional[Dict] = None,
+    health_profile: Optional[Dict] = None
 ) -> List[MealPlanItem]:
     """
-    Regenerate meals for a specific day
-    
-    PROCESS:
-    1. Verify meal plan exists
-    2. Delete existing items for target date
-    3. Get user goal for calorie targets
-    4. Generate new meals using same algorithm
-    
-    Args:
-        meal_plan_id: Meal plan UUID
-        target_date: Date to regenerate
-        preferences: Optional new preferences
-    
-    Returns:
-        List of new MealPlanItem objects
-    
-    Raises:
-        ValueError: If plan not found or date out of range
+    Regenerate meals for a specific day with health profile support
     """
     
     meal_plan = db.query(MealPlan).filter(
@@ -843,7 +1210,7 @@ def regenerate_day(
     # Get user goal
     goal = db.query(UserGoal).filter(
         UserGoal.user_id == meal_plan.user_id,
-        UserGoal.is_active == True
+        UserGoal.is_deleted == False
     ).first()
     
     if not goal:
@@ -856,6 +1223,17 @@ def regenerate_day(
     meal_distribution = MEAL_DISTRIBUTIONS[goal_type_key]
     
     print(f"🎯 Regenerating day with {goal_type_key} distribution")
+    
+    # Use health profile from meal plan preferences if not provided
+    if not health_profile and meal_plan.preferences:
+        health_profile = meal_plan.preferences.get("health_profile")
+    
+    # Extract health profile data
+    food_allergies = health_profile.get("food_allergies", []) if health_profile else []
+    dietary_preferences = health_profile.get("dietary_preferences", []) if health_profile else []
+    health_conditions = health_profile.get("health_conditions", []) if health_profile else []
+    suggested_tags = _suggest_tags_from_health_conditions(health_conditions)
+    all_preferences_tags = list(set(dietary_preferences + suggested_tags))
     
     # Calculate meal targets
     meal_targets = {
@@ -895,7 +1273,10 @@ def regenerate_day(
             goal_type=goal.goal_type,
             preferences=preferences or meal_plan.preferences,
             exclude_recipe_ids=exclude_recent,
-            tolerance=0.2
+            tolerance=0.2,
+            food_allergies=food_allergies,
+            dietary_preferences=all_preferences_tags,
+            health_conditions=health_conditions
         )
         
         if not recipe:

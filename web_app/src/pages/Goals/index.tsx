@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Target, Calendar, Check, Flame, Scale, Timer } from 'lucide-react';
+import { Plus, Target, Calendar, Check, Flame, Scale, Timer, Heart, AlertTriangle } from 'lucide-react';
 import { Card, CardBody, CardHeader, Button, Badge, Modal, Input, EmptyState, useToast } from '../../components/ui';
 import { DatePicker } from '../../components/ui/DatePicker';
 import { PageContainer } from '../../components/layout';
 import { goalApi } from '../../api/goal';
+import { healthProfileApi, type HealthProfileData } from '../../api/healthProfile';
+import { HealthProfileModal, HealthProfileDisplay } from '../../components/health';
 
 export default function GoalsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -74,6 +76,32 @@ export default function GoalsPage() {
               <GoalStat label="Calories/ngày" value={`${activeGoal.daily_calorie_target || '-'} kcal`} icon={<Flame className="w-4 h-4" />} />
               <GoalStat label="Hạn chót" value={activeGoal.target_date ? new Date(activeGoal.target_date).toLocaleDateString('vi-VN') : 'Không có'} icon={<Timer className="w-4 h-4" />} />
             </div>
+
+            {/* Health Profile Summary in Active Goal */}
+            {(activeGoal.health_conditions?.length > 0 || activeGoal.food_allergies?.length > 0 || activeGoal.dietary_preferences?.length > 0) && (
+              <div className="mt-6 pt-6 border-t border-gray-100">
+                <h3 className="text-sm font-medium text-gray-700 mb-4">Thể trạng</h3>
+                <div className="flex flex-wrap gap-2">
+                  {activeGoal.food_allergies?.length > 0 && (
+                    <Badge variant="danger">
+                      <AlertTriangle className="w-3 h-3 mr-1" />
+                      {activeGoal.food_allergies.length} dị ứng
+                    </Badge>
+                  )}
+                  {activeGoal.health_conditions?.length > 0 && (
+                    <Badge variant="info">
+                      <Heart className="w-3 h-3 mr-1" />
+                      {activeGoal.health_conditions.length} điều kiện
+                    </Badge>
+                  )}
+                  {activeGoal.dietary_preferences?.length > 0 && (
+                    <Badge variant="success">
+                      {activeGoal.dietary_preferences.length} chế độ ăn
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            )}
 
             {activeGoal.protein_target_g && activeGoal.carbs_target_g && activeGoal.fat_target_g && (
               <div className="mt-6 pt-6 border-t border-gray-100">
@@ -188,11 +216,26 @@ function MacroTarget({ label, value, color }: { label: string; value: number; co
 function CreateGoalModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const toast = useToast();
   const queryClient = useQueryClient();
+
   const [goalType, setGoalType] = useState('weight_loss');
   const [currentWeight, setCurrentWeight] = useState('');
   const [targetWeight, setTargetWeight] = useState('');
   const [targetDate, setTargetDate] = useState('');
   const [calorieTarget, setCalorieTarget] = useState('');
+
+  // Health profile state
+  const [healthProfile, setHealthProfile] = useState<HealthProfileData>({
+    health_conditions: [],
+    food_allergies: [],
+    dietary_preferences: [],
+  });
+  const [isHealthProfileModalOpen, setIsHealthProfileModalOpen] = useState(false);
+  const [showHealthSection, setShowHealthSection] = useState(false);
+
+  const hasHealthProfileData =
+    healthProfile.health_conditions.length > 0 ||
+    healthProfile.food_allergies.length > 0 ||
+    healthProfile.dietary_preferences.length > 0;
 
   const handleCreate = () => {
     const cw = parseFloat(currentWeight);
@@ -238,6 +281,9 @@ function CreateGoalModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
       target_weight_kg: targetWeight ? parseFloat(targetWeight) : undefined,
       target_date: targetDate || undefined,
       daily_calorie_target: calorieTarget ? parseInt(calorieTarget) : undefined,
+      health_conditions: hasHealthProfileData ? healthProfile.health_conditions : undefined,
+      food_allergies: hasHealthProfileData ? healthProfile.food_allergies : undefined,
+      dietary_preferences: hasHealthProfileData ? healthProfile.dietary_preferences : undefined,
     }),
     onSuccess: () => {
       toast.success('Đã tạo mục tiêu mới');
@@ -247,6 +293,12 @@ function CreateGoalModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
       setTargetDate('');
       setCalorieTarget('');
       setGoalType('weight_loss');
+      setHealthProfile({
+        health_conditions: [],
+        food_allergies: [],
+        dietary_preferences: [],
+      });
+      setShowHealthSection(false);
       onClose();
     },
     onError: (error: any) => {
@@ -260,6 +312,11 @@ function CreateGoalModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
       }
     },
   });
+
+  const handleSaveHealthProfile = (data: HealthProfileData) => {
+    setHealthProfile(data);
+    setIsHealthProfileModalOpen(false);
+  };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Tạo mục tiêu mới">
@@ -324,6 +381,47 @@ function CreateGoalModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
           placeholder="2000"
         />
 
+        {/* Health Profile Section */}
+        <div className="rounded-2xl border border-gray-200 bg-gray-50/80 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Heart className="w-5 h-5 text-gray-500" />
+              <span className="font-medium text-gray-700">Thể trạng (tùy chọn)</span>
+            </div>
+            <button
+              onClick={() => setShowHealthSection(!showHealthSection)}
+              className="text-sm text-primary hover:text-primary/80"
+            >
+              {showHealthSection ? 'Ẩn bớt' : 'Thêm thể trạng'}
+            </button>
+          </div>
+
+          {showHealthSection && (
+            <div className="space-y-3">
+              {hasHealthProfileData && (
+                <div className="bg-white rounded-lg p-3 border border-gray-100">
+                  <HealthProfileDisplay data={healthProfile} compact />
+                </div>
+              )}
+
+              <Button
+                variant="outline"
+                onClick={() => setIsHealthProfileModalOpen(true)}
+                className="w-full"
+                size="sm"
+              >
+                {hasHealthProfileData ? 'Cập nhật thể trạng' : 'Nhập thể trạng'}
+              </Button>
+
+              {hasHealthProfileData && (
+                <p className="text-xs text-gray-500 text-center">
+                  Thể trạng sẽ được lưu cùng với mục tiêu này
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
         <div className="flex gap-3 pt-2">
           <Button variant="outline" onClick={onClose} className="flex-1">Hủy</Button>
           <Button onClick={handleCreate} isLoading={createMutation.isPending} className="flex-1">
@@ -331,6 +429,15 @@ function CreateGoalModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
           </Button>
         </div>
       </div>
+
+      {/* Health Profile Modal */}
+      <HealthProfileModal
+        isOpen={isHealthProfileModalOpen}
+        onClose={() => setIsHealthProfileModalOpen(false)}
+        onSave={handleSaveHealthProfile}
+        initialData={healthProfile}
+        isLoading={false}
+      />
     </Modal>
   );
 }
