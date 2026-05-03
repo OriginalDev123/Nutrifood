@@ -3,7 +3,8 @@ Vision Service - Gemini 1.5 Flash Vision Integration
 Business logic cho food recognition
 """
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from PIL import Image
 import json
 import logging
@@ -86,11 +87,12 @@ Không thêm giải thích, không markdown, không JSON.
     def __init__(self):
         """Khởi tạo Gemini Vision + Redis Cache"""
         self.active_model_name = ""
+        self.client = None
         
         # Validate API key
         if not settings.validate_api_key():
             logger.warning("⚠️  GOOGLE_API_KEY chưa được cấu hình!")
-            self.model = None
+            self.client = None
             return
 
         self._initialize_model()
@@ -202,14 +204,7 @@ Không thêm giải thích, không markdown, không JSON.
                 temperature = retry_temperatures[min(attempt, len(retry_temperatures) - 1)]
 
                 try:
-                    response = self.model.generate_content(
-                        [prompt, image],
-                        generation_config={
-                            "temperature": 0.1,
-                            "max_output_tokens": 256
-                        },
-                        request_options={"timeout": self.GEMINI_CALL_TIMEOUT_SECONDS}
-                    )
+                    response = self._call_vision_api(prompt, image, temperature=temperature)
                 except Exception as model_error:
                     parse_error = model_error
                     if self._should_switch_to_fallback_model(model_error):
@@ -424,6 +419,30 @@ Không thêm giải thích, không markdown, không JSON.
             logger.error(f"❌ Lỗi phân tích ảnh: {error_msg}", exc_info=True)
             raise ValueError(f"Gemini Vision error: {error_msg}")
 
+    def _call_vision_api(self, prompt: str, image: Image.Image, temperature: float = 0.1):
+        """Call Gemini Vision API with the new SDK"""
+        # Convert PIL Image to bytes for the new SDK
+        import io
+        image_bytes = io.BytesIO()
+        image.save(image_bytes, format='PNG')
+        image_bytes = image_bytes.getvalue()
+        
+        image_part = types.Part(inline_data=types.Blob(
+            mime_type='image/png',
+            data=image_bytes
+        ))
+        text_part = types.Part(text=prompt)
+        
+        response = self.client.models.generate_content(
+            model=self.active_model_name,
+            contents=[types.Content(role="user", parts=[text_part, image_part])],
+            config=types.GenerateContentConfig(
+                temperature=temperature,
+                max_output_tokens=256
+            )
+        )
+        return response
+
     def _attempt_minimal_recovery(
         self,
         image: Image.Image,
@@ -436,26 +455,12 @@ Không thêm giải thích, không markdown, không JSON.
 
         try:
             try:
-                response = self.model.generate_content(
-                    [prompt, image],
-                    generation_config={
-                        "temperature": 0.0,
-                        "max_output_tokens": 128
-                    },
-                    request_options={"timeout": self.GEMINI_CALL_TIMEOUT_SECONDS}
-                )
+                response = self._call_vision_api(prompt, image, temperature=0.0)
             except Exception as model_error:
                 if self._should_switch_to_fallback_model(model_error):
                     switched = self._switch_to_fallback_model()
                     if switched:
-                        response = self.model.generate_content(
-                            [prompt, image],
-                            generation_config={
-                                "temperature": 0.0,
-                                "max_output_tokens": 128
-                            },
-                            request_options={"timeout": self.GEMINI_CALL_TIMEOUT_SECONDS}
-                        )
+                        response = self._call_vision_api(prompt, image, temperature=0.0)
                     else:
                         return None, model_error
                 else:
@@ -512,14 +517,7 @@ Không thêm giải thích, không markdown, không JSON.
             prompt += f"\nGợi ý người dùng: {user_hint.strip()}"
 
         try:
-            response = self.model.generate_content(
-                [prompt, image],
-                generation_config={
-                    "temperature": 0.0,
-                    "max_output_tokens": 32
-                },
-                request_options={"timeout": self.GEMINI_CALL_TIMEOUT_SECONDS}
-            )
+            response = self._call_vision_api(prompt, image, temperature=0.0)
             raw_text = (getattr(response, "text", "") or "").strip()
             logger.info(f"📄 Plaintext recovery raw response: {raw_text[:120]}")
 
@@ -592,11 +590,8 @@ Không thêm giải thích, không markdown, không JSON.
 
     def _initialize_model(self) -> None:
         """Initialize Gemini model if API key is configured"""
-        genai.configure(api_key=settings.GOOGLE_API_KEY)
+        self.client = genai.Client(api_key=settings.GOOGLE_API_KEY)
         vision_model_name = settings.GEMINI_VISION_MODEL or settings.GEMINI_MODEL
-        self.model = genai.GenerativeModel(
-            model_name=vision_model_name
-        )
         self.active_model_name = vision_model_name
         logger.info(f"✅ Gemini Vision initialized: {vision_model_name}")
 
@@ -615,7 +610,6 @@ Không thêm giải thích, không markdown, không JSON.
             return False
 
         try:
-            self.model = genai.GenerativeModel(model_name=fallback_model)
             self.active_model_name = fallback_model
             logger.info(f"✅ Switched Vision model to fallback: {fallback_model}")
             return True
@@ -652,7 +646,7 @@ Không thêm giải thích, không markdown, không JSON.
         if not settings.validate_api_key():
             raise ValueError("GOOGLE_API_KEY chưa được cấu hình")
 
-        if self.model is None:
+        if self.client is None:
             self._initialize_model()
 
     def _has_time_budget(self, deadline_ts: float, reserve_seconds: float = 0.0) -> bool:

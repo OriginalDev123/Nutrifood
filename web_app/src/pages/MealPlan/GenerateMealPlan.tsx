@@ -20,8 +20,20 @@ const MEAL_TYPE_VI: Record<MealPlanItem['meal_type'], string> = {
 function mealItemLabel(item: MealPlanItem): string {
   if (item.recipe_name) return item.recipe_name;
   if (item.food_name) return item.food_name;
-  if (item.notes && item.notes.startsWith('Recipe: ')) {
-    return item.notes.replace('Recipe: ', '');
+  // Handle both "Recipe: " (from database) and "Custom: " (from AI)
+  if (item.notes) {
+    if (item.notes.startsWith('Recipe: ')) {
+      return item.notes.replace('Recipe: ', '');
+    }
+    if (item.notes.startsWith('Custom: ')) {
+      // Extract food name from "Custom: {name} | Nguyên liệu: ..."
+      const customPart = item.notes.replace('Custom: ', '');
+      const pipeIndex = customPart.indexOf(' | ');
+      if (pipeIndex > 0) {
+        return customPart.substring(0, pipeIndex);
+      }
+      return customPart;
+    }
   }
   return 'Món ăn';
 }

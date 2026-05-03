@@ -16,7 +16,7 @@ const createClient = (baseURL: string, timeout: number) => axios.create({
   },
 });
 
-export const apiClient = createClient(API_URL, 10000);
+export const apiClient = createClient(API_URL, 60000);
 export const aiServiceClient = createClient(AI_SERVICE_URL, 30000);
 
 export const getAuthToken = (): string | null => {

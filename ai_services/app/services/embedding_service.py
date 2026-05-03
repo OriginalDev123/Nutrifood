@@ -3,7 +3,8 @@ Embedding Service - Gemini Text Embeddings
 Convert text to 768-dimensional vectors for semantic search
 """
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from typing import List
 import logging
 
@@ -20,7 +21,7 @@ class EmbeddingService:
         Args:
             api_key: Google AI API key
         """
-        genai.configure(api_key=api_key)
+        self.client = genai.Client(api_key=api_key)
         self.model = "models/text-embedding-004"
         logger.info(f"✅ EmbeddingService initialized with model: {self.model}")
     
@@ -47,13 +48,13 @@ class EmbeddingService:
             return [0.0] * 768  # Return zero vector for empty text
         
         try:
-            result = genai.embed_content(
+            result = self.client.models.embed_content(
                 model=self.model,
-                content=text,
-                task_type=task_type
+                contents=[types.Content(role="user", parts=[types.Part(text=text)])],
+                config=types.EmbedContentConfig(task_type=task_type)
             )
             
-            embedding = result['embedding']
+            embedding = result.embeddings[0].values
             logger.debug(f"✓ Embedded text ({len(text)} chars) → {len(embedding)} dims")
             return embedding
             

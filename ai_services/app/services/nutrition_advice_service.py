@@ -18,6 +18,9 @@ import httpx
 import json
 import re
 
+from google import genai
+from google.genai import types
+
 from app.config import settings
 from app.prompts.nutrition_advice_prompt import (
     build_nutrition_advice_prompt,
@@ -25,12 +28,10 @@ from app.prompts.nutrition_advice_prompt import (
     build_progress_report_prompt
 )
 
-import google.generativeai as genai
-
 logger = logging.getLogger(__name__)
 
-# Configure Gemini
-genai.configure(api_key=settings.GOOGLE_API_KEY)
+# Configure Gemini client
+client = genai.Client(api_key=settings.GOOGLE_API_KEY)
 
 
 class NutritionAdviceService:
@@ -53,8 +54,22 @@ class NutritionAdviceService:
         """
         self.backend_url = backend_url.rstrip("/")
         self.analytics_base_url = f"{self.backend_url}/api/v1/analytics"
-        self.model = genai.GenerativeModel(settings.GEMINI_MODEL)
+        self.model_name = settings.GEMINI_MODEL
         logger.info(f"✅ NutritionAdviceService initialized (backend: {backend_url})")
+
+    async def _generate_content(self, prompt: str, max_tokens: int = 2048, temperature: float = 0.3) -> str:
+        """Generate content using the new SDK"""
+        response = client.models.generate_content(
+            model=self.model_name,
+            contents=[types.Content(role="user", parts=[types.Part(text=prompt)])],
+            config=types.GenerateContentConfig(
+                temperature=temperature,
+                max_output_tokens=max_tokens,
+                top_p=0.95,
+                top_k=40
+            )
+        )
+        return response.text
 
     # ==========================================
     # DATA FETCHING (from Backend)
@@ -418,17 +433,11 @@ class NutritionAdviceService:
 
         # 4. Generate with AI
         try:
-            response = await self.model.generate_content_async(
+            advice_text = await self._generate_content(
                 prompt,
-                generation_config={
-                    "temperature": 0.3,  # Low temperature for consistent advice
-                    "max_output_tokens": 2048,
-                    "top_p": 0.95,
-                    "top_k": 40
-                }
+                max_tokens=2048,
+                temperature=0.3
             )
-
-            advice_text = response.text
 
             # 5. Parse JSON response
             advice = self._parse_advice_response(advice_text)
@@ -510,17 +519,11 @@ class NutritionAdviceService:
 
         # 3. Generate
         try:
-            response = await self.model.generate_content_async(
+            advice_text = await self._generate_content(
                 prompt,
-                generation_config={
-                    "temperature": 0.4,
-                    "max_output_tokens": 512,
-                    "top_p": 0.95,
-                    "top_k": 40
-                }
+                max_tokens=512,
+                temperature=0.4
             )
-
-            advice_text = response.text
 
             # 4. Parse
             advice = self._parse_quick_advice_response(advice_text)
@@ -590,17 +593,11 @@ class NutritionAdviceService:
 
         # 3. Generate
         try:
-            response = await self.model.generate_content_async(
+            report_text = await self._generate_content(
                 prompt,
-                generation_config={
-                    "temperature": 0.3,
-                    "max_output_tokens": 1536,
-                    "top_p": 0.95,
-                    "top_k": 40
-                }
+                max_tokens=1536,
+                temperature=0.3
             )
-
-            report_text = response.text
 
             # 4. Parse
             report = self._parse_progress_report_response(report_text)

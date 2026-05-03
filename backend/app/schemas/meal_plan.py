@@ -112,8 +112,18 @@ class MealPlanItemSimple(BaseModel):
     def from_item(cls, item: "MealPlanItem") -> "MealPlanItemSimple":
         """Convert from SQLAlchemy model"""
         name = None
-        if item.notes and item.notes.startswith("Recipe: "):
-            name = item.notes.replace("Recipe: ", "")
+        # Handle both "Recipe: " (from database) and "Custom: " (from AI)
+        if item.notes:
+            if item.notes.startswith("Recipe: "):
+                name = item.notes.replace("Recipe: ", "")
+            elif item.notes.startswith("Custom: "):
+                # Extract food name from "Custom: {name} | Nguyên liệu: ..."
+                custom_part = item.notes.replace("Custom: ", "")
+                pipe_index = custom_part.find(" | ")
+                if pipe_index > 0:
+                    name = custom_part[:pipe_index]
+                else:
+                    name = custom_part
         return cls(
             item_id=item.item_id,
             meal_type=item.meal_type,

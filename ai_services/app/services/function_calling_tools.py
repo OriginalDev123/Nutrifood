@@ -222,7 +222,7 @@ class FunctionCallingTools:
             results = self.retrieval.search(
                 query=criteria,
                 top_k=limit,
-                score_threshold=0.35
+                score_threshold=0.20
             )
             
             formatted = []

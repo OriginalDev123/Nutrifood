@@ -3,7 +3,8 @@ Chat Service - RAG Pipeline
 Retrieval-Augmented Generation for nutrition Q&A
 """
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from typing import Dict, Optional, List
 import logging
 import time
@@ -32,6 +33,8 @@ class ChatService:
             "Thịt bò có bao nhiêu calories?" → "Thịt bò calories"
             "Cam có chứa vitamin C không?" → "Cam vitamin C"
             "Cơm trắng carbs bao nhiêu?" → "Cơm trắng carbs"
+            "Gợi ý bữa ăn sáng" → "bánh mì xôi phở bún bữa sáng"
+            "Món ăn giảm cân" → "salad rau ít calories"
         
         Args:
             query: Original Vietnamese question
@@ -39,20 +42,49 @@ class ChatService:
         Returns:
             Processed query with key terms only
         """
-        processed = query
+        processed = query.lower().strip()
         
-        # "có chứa X không" → "X"
+        # === Handle "gợi ý" patterns ===
+        breakfast_foods = "bánh mì xôi phở bún cháo bánh bao bánh cuốn mì"
+        lunch_dinner_foods = "cơm phở bún miến mì bánh tráng"
+
+        # Check for breakfast
+        if 'sáng' in processed:
+            processed = re.sub(r'gợi ý|bữa', '', processed) + ' ' + breakfast_foods
+        # Check for lunch
+        elif 'trưa' in processed:
+            processed = re.sub(r'gợi ý|bữa', '', processed) + ' ' + lunch_dinner_foods
+        # Check for dinner
+        elif 'tối' in processed:
+            processed = re.sub(r'gợi ý|bữa', '', processed) + ' ' + lunch_dinner_foods
+        elif 'gợi ý' in processed:
+            # "gợi ý món ăn nào", "món ăn gì" - keep the food-related part
+            processed = re.sub(r'gợi ý|món\s*ăn\s*nào|món\s*ăn\s*gì|nào|gì', '', processed)
+        
+        # === Handle "nấu với" patterns ===
+        # "nấu với thịt bò" → "thịt bò"
+        if 'nấu với' in processed:
+            processed = re.sub(r'nấu\s*với\s*', '', processed)
+        
+        # === Handle nutrition/goals patterns ===
+        if 'giảm cân' in processed:
+            processed = re.sub(r'giảm\s*cân', 'ít calories salad rau xanh protein', processed)
+        if 'tăng cơ' in processed or 'tăng cân' in processed:
+            processed = re.sub(r'tăng\s*cơ|tăng\s*cân', 'protein cao calories cao', processed)
+        
+        # === "có chứa X không" → "X" ===
         processed = re.sub(r'có\s+chứa\s+([\w\s]+?)\s+không', r'\1', processed)
         
-        # Remove common question words
+        # === Remove common question words ===
         patterns = [
             r'\bcó bao nhiêu\b', r'\bbao nhiêu\b', r'\bchứa\b',
-            r'\bcó\b', r'\bkhông\b', r'\bgiá trị\b', r'\blượng\b', r'\bhàm lượng\b'
+            r'\bcó\b', r'\bkhông\b', r'\bgiá trị\b', r'\blượng\b', r'\bhàm lượng\b',
+            r'\bcho\s*tôi\b', r'\blà\s*món\s*gì\b', r'\blà\s*gì\b', r'\bở\s*đâu\b'
         ]
         for pattern in patterns:
             processed = re.sub(pattern, '', processed)
         
-        # Remove punctuation and clean whitespace
+        # === Remove punctuation and clean whitespace ===
         processed = re.sub(r'[?!,.]', '', processed)
         processed = ' '.join(processed.split())
         
@@ -66,13 +98,9 @@ class ChatService:
             api_key: Google AI API key
             retrieval_service: RetrievalService for document retrieval
         """
-        genai.configure(api_key=api_key)
+        self.client = genai.Client(api_key=api_key)
         chat_model_name = settings.GEMINI_MODEL
-        self.model = genai.GenerativeModel(model_name=chat_model_name)
-        self.model_with_tools = genai.GenerativeModel(
-            model_name=chat_model_name,
-            tools=[TOOLS]
-        )
+        self.model_name = chat_model_name
         self.retrieval = retrieval_service
         self.function_tools = FunctionCallingTools(retrieval_service)
         
@@ -85,7 +113,7 @@ class ChatService:
         question: str,
         user_context: Optional[Dict] = None,
         top_k: int = 3,
-        score_threshold: float = 0.35,
+        score_threshold: float = 0.20,
         conversation_context: Optional[str] = None
     ) -> Dict:
         """
@@ -159,14 +187,15 @@ class ChatService:
             
             # Step 3: Generate answer
             logger.debug("🧠 Generating answer with Gemini...")
-            response = self.model.generate_content(
-                prompt,
-                generation_config={
-                    "temperature": settings.GEMINI_TEMPERATURE,
-                    "max_output_tokens": min(500, settings.GEMINI_MAX_TOKENS),
-                    "top_p": 0.95,
-                    "top_k": 40
-                }
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=[types.Content(role="user", parts=[types.Part(text=prompt)])],
+                config=types.GenerateContentConfig(
+                    temperature=settings.GEMINI_TEMPERATURE,
+                    max_output_tokens=2048,  # Increased for full answers
+                    top_p=0.95,
+                    top_k=40
+                )
             )
             
             answer_text = response.text
@@ -250,14 +279,15 @@ class ChatService:
             
             # Step 3: Generate
             logger.debug("🧠 Generating answer with Gemini...")
-            response = self.model.generate_content(
-                prompt,
-                generation_config={
-                    "temperature": settings.GEMINI_TEMPERATURE,
-                    "max_output_tokens": min(500, settings.GEMINI_MAX_TOKENS),
-                    "top_p": 0.95,
-                    "top_k": 40
-                }
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=[types.Content(role="user", parts=[types.Part(text=prompt)])],
+                config=types.GenerateContentConfig(
+                    temperature=settings.GEMINI_TEMPERATURE,
+                    max_output_tokens=2048,  # Increased for full answers
+                    top_p=0.95,
+                    top_k=40
+                )
             )
             
             answer_text = response.text
@@ -301,7 +331,7 @@ class ChatService:
         Answer question with Function Calling capabilities
         
         Workflow:
-        1. Send query to Gemini with all 6 tools available
+        1. Send query to Gemini with all tools available
         2. If Gemini calls a function, execute it
         3. Send results back to Gemini for final answer
         4. Return natural language response
@@ -338,101 +368,142 @@ class ChatService:
         logger.info(f"🤖 Function Calling Query: {query[:100]}...")
         
         try:
+            # Build tools list from TOOLS definition
+            tools = []
+            for func_decl in TOOLS.get("function_declarations", []):
+                tools.append(types.Tool(function_declarations=[func_decl]))
+            
             # Step 1: Send query to Gemini with tools
-            response = self.model_with_tools.generate_content(
-                query,
-                generation_config={
-                    "temperature": settings.GEMINI_TEMPERATURE,
-                    "max_output_tokens": min(1000, settings.GEMINI_MAX_TOKENS),
-                    "top_p": 0.95,
-                    "top_k": 40
-                }
+            # Enhanced system instruction for better Vietnamese query understanding
+            system_instr = """Bạn là trợ lý dinh dưỡng NutriAI. Trả lời bằng tiếng Việt.
+
+KHI TÌM KIẾM MÓN ĂN:
+- "Gợi ý bữa sáng" → search_food với criteria là các món sáng phổ biến: "bánh mì, xôi, phở, bún, cháo"
+- "Món ăn nhiều protein" → search_food với criteria là "protein cao"
+- "Món giảm cân" → search_food với criteria là "ít calories, rau, salad"
+- "Nấu với thịt bò" → search_food với criteria là "thịt bò"
+- LUÔN tìm TÊN MÓN CỤ THỂ, không tìm cụm từ trừu tượng như "bữa sáng", "dinh dưỡng"
+
+HÃY SUY NGHĨ: User muốn ăn gì? Tìm tên món cụ thể phù hợp."""
+
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=[types.Content(role="user", parts=[types.Part(text=query)])],
+                config=types.GenerateContentConfig(
+                    temperature=settings.GEMINI_TEMPERATURE,
+                    max_output_tokens=min(1000, settings.GEMINI_MAX_TOKENS),
+                    tools=tools,
+                    system_instruction=types.Content(parts=[types.Part(text=system_instr)])
+                )
             )
             
             # Step 2: Check if function was called
             function_called = None
             function_result = None
+            fn_call = None
             
-            for part in response.candidates[0].content.parts:
-                if hasattr(part, 'function_call') and part.function_call:
-                    fn_call = part.function_call
-                    function_called = fn_call.name
-                    fn_args = dict(fn_call.args)
-                    
-                    logger.info(f"   🔧 Function Called: {function_called}()")
-                    logger.debug(f"   Arguments: {fn_args}")
-                    
-                    # Step 3: Execute the function
-                    function_map = self.function_tools.get_function_map()
-                    
-                    if function_called in function_map:
-                        func = function_map[function_called]
+            # Check for function calls in response
+            for candidate in response.candidates:
+                for part in candidate.content.parts:
+                    if part.function_call:
+                        fn_call = part.function_call
+                        function_called = fn_call.name
+                        fn_args = {k: v for k, v in fn_call.args.items()}
                         
-                        # Add user_id / jwt token to args if function accepts it
-                        sig = inspect.signature(func)
-                        if 'user_id' in sig.parameters:
-                            fn_args['user_id'] = user_id
-                        if 'jwt_token' in sig.parameters:
-                            fn_args['jwt_token'] = jwt_token
+                        logger.info(f"   🔧 Function Called: {function_called}()")
+                        logger.debug(f"   Arguments: {fn_args}")
+                        
+                        # Step 3: Execute the function
+                        function_map = self.function_tools.get_function_map()
+                        
+                        if function_called in function_map:
+                            func = function_map[function_called]
+                            
+                            # Add user_id / jwt token to args if function accepts it
+                            sig = inspect.signature(func)
+                            if 'user_id' in sig.parameters:
+                                fn_args['user_id'] = user_id
+                            if 'jwt_token' in sig.parameters:
+                                fn_args['jwt_token'] = jwt_token
 
-                        # Call async or sync function
-                        if inspect.iscoroutinefunction(func):
-                            function_result = await func(**fn_args)
+                            # Call async or sync function
+                            if inspect.iscoroutinefunction(func):
+                                function_result = await func(**fn_args)
+                            else:
+                                function_result = func(**fn_args)
+                            
+                            logger.info(f"   ✅ Function executed: {function_result.get('success', 'N/A')}")
+                            
+                            # Step 4: Send results back to Gemini for final answer
+                            # The original fn_call already has thought_signature from the model
+                            # We need to use Part with thought=True for tool calls
+                            thought_part = types.Part(
+                                function_call=fn_call,
+                                thought=True
+                            )
+                            
+                            # Enhanced system instruction for second response
+                            second_system_instr = """Bạn là trợ lý dinh dưỡng NutriAI. 
+TRẢ LỜI BẰNG TIẾNG VIỆT TỰ NHIÊN.
+TRẢ LỜI ĐẦY ĐỦ, không cắt ngắn.
+KHÔNG viết internal thoughts, reasoning, hay meta-comments.
+Chỉ viết câu trả lời TRỰC TIẾP cho người dùng."""
+                            
+                            response = self.client.models.generate_content(
+                                model=self.model_name,
+                                contents=[
+                                    types.Content(role="user", parts=[types.Part(text=query)]),
+                                    types.Content(role="model", parts=[thought_part]),
+                                    types.Content(role="user", parts=[
+                                        types.Part.from_function_response(
+                                            name=function_called,
+                                            response=function_result
+                                        )
+                                    ])
+                                ],
+                                config=types.GenerateContentConfig(
+                                    temperature=settings.GEMINI_TEMPERATURE,
+                                    max_output_tokens=2048,  # Increased for full answers
+                                    tools=tools,
+                                    system_instruction=types.Content(parts=[types.Part(text=second_system_instr)])
+                                )
+                            )
                         else:
-                            function_result = func(**fn_args)
+                            logger.error(f"❌ Unknown function: {function_called}")
+                            function_result = {"success": False, "error": f"Unknown function: {function_called}"}
                         
-                        logger.info(f"   ✅ Function executed: {function_result.get('success', 'N/A')}")
-                        
-                        # Step 4: Send results back to Gemini for final answer
-                        response = self.model_with_tools.generate_content(
-                            [
-                                {"role": "user", "parts": [{"text": query}]},
-                                {
-                                    "role": "model",
-                                    "parts": [{"function_call": fn_call}]
-                                },
-                                {
-                                    "role": "user",
-                                    "parts": [{
-                                        "function_response": {
-                                            "name": function_called,
-                                            "response": function_result
-                                        }
-                                    }]
-                                }
-                            ],
-                            generation_config={
-                                "temperature": settings.GEMINI_TEMPERATURE,
-                                "max_output_tokens": min(1000, settings.GEMINI_MAX_TOKENS)
-                            }
-                        )
-                    else:
-                        logger.error(f"❌ Unknown function: {function_called}")
-                        function_result = {"success": False, "error": f"Unknown function: {function_called}"}
-                    
+                        break
+                if function_called:
                     break
             
-            # Extract final answer - safely handle both text and function_call responses
+            # Extract final answer
             answer_text = ""
             try:
-                # Check if response has text parts
-                if hasattr(response, 'text'):
+                if hasattr(response, 'text') and response.text:
                     answer_text = response.text
-                elif hasattr(response, 'candidates') and response.candidates:
-                    # Extract text from parts manually
-                    for part in response.candidates[0].content.parts:
-                        if hasattr(part, 'text') and part.text:
-                            answer_text += part.text
+                else:
+                    for candidate in response.candidates:
+                        for part in candidate.content.parts:
+                            if hasattr(part, 'text') and part.text:
+                                answer_text += part.text
                 
-                # Fallback if no text found
                 if not answer_text:
-                    if function_called and function_result and function_result.get('success'):
-                        answer_text = "Đã thực hiện xong!"
+                    # Gemini did not produce a text response - format from function_result
+                    if function_called and function_result:
+                        answer_text = self._format_function_result_as_answer(
+                            function_called, function_result
+                        )
                     else:
-                        answer_text = "Đã nhận được yêu cầu."
+                        answer_text = "Tôi đã nhận được yêu cầu nhưng chưa thể tạo câu trả lời chi tiết. Bạn có thể thử hỏi theo cách khác không?"
             except Exception as e:
                 logger.warning(f"⚠️  Failed to extract response text: {str(e)}")
-                answer_text = "Đã thực hiện xong!" if function_called else "Đã nhận được yêu cầu."
+                # Format from function_result on error
+                if function_called and function_result:
+                    answer_text = self._format_function_result_as_answer(
+                        function_called, function_result
+                    )
+                else:
+                    answer_text = "Đã xảy ra lỗi khi xử lý phản hồi. Vui lòng thử lại."
             
             processing_time = int((time.time() - start_time) * 1000)
             logger.info(f"✅ Answer generated in {processing_time}ms")
@@ -537,14 +608,15 @@ class ChatService:
             
             # Step 4: Generate answer
             logger.debug("🧠 Generating answer with Gemini (vision mode)...")
-            response = self.model.generate_content(
-                prompt,
-                generation_config={
-                    "temperature": settings.GEMINI_TEMPERATURE,
-                    "max_output_tokens": min(500, settings.GEMINI_MAX_TOKENS),
-                    "top_p": 0.95,
-                    "top_k": 40
-                }
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=[types.Content(role="user", parts=[types.Part(text=prompt)])],
+                config=types.GenerateContentConfig(
+                    temperature=settings.GEMINI_TEMPERATURE,
+                    max_output_tokens=2048,  # Increased for full answers
+                    top_p=0.95,
+                    top_k=40
+                )
             )
             
             answer_text = response.text
@@ -580,6 +652,255 @@ class ChatService:
                 "processing_time_ms": processing_time,
                 "error": str(e)
             }
+
+    def _format_function_result_as_answer(
+        self,
+        function_name: str,
+        result: Dict
+    ) -> str:
+        """
+        Format function execution result into a natural language answer.
+        
+        This ensures that even when Gemini doesn't produce a good text response,
+        the user still gets meaningful information from the function execution.
+        
+        Args:
+            function_name: Name of the function that was called
+            result: Result dictionary from the function execution
+        
+        Returns:
+            Formatted answer string in Vietnamese
+        """
+        if not result:
+            return "Không có kết quả từ chức năng này."
+        
+        success = result.get("success", False)
+        if not success:
+            error_msg = result.get("error", "Lỗi không xác định")
+            return f"Xin lỗi, đã xảy ra lỗi: {error_msg}"
+        
+        # Route to specific formatter based on function name
+        formatter_map = {
+            "search_food": self._format_search_food_result,
+            "log_food": self._format_log_food_result,
+            "find_alternatives": self._format_find_alternatives_result,
+            "adjust_goal": self._format_adjust_goal_result,
+            "regenerate_meal_plan": self._format_meal_plan_result,
+            "get_progress_insight": self._format_progress_insight_result,
+            "get_weekly_insights": self._format_weekly_insights_result,
+            "get_goal_analysis": self._format_goal_analysis_result,
+            "get_nutrition_trends": self._format_nutrition_trends_result,
+        }
+        
+        formatter = formatter_map.get(function_name)
+        if formatter:
+            return formatter(result)
+        
+        # Generic formatter for unknown functions
+        return self._format_generic_result(result)
+    
+    def _format_search_food_result(self, result: Dict) -> str:
+        """Format search_food result into natural language"""
+        foods = result.get("results", [])
+        count = result.get("count", 0)
+        
+        if count == 0:
+            return "Không tìm thấy món ăn nào phù hợp với từ khóa của bạn."
+        
+        lines = [f"Tôi tìm thấy {count} kết quả:\n"]
+        for i, food in enumerate(foods[:5], 1):
+            title = food.get("title", "Không có tên")
+            content = food.get("content", "")
+            # Extract first 150 chars of content
+            snippet = content[:150] + "..." if len(content) > 150 else content
+            lines.append(f"{i}. **{title}**")
+            if snippet:
+                lines.append(f"   {snippet}")
+        
+        return "\n".join(lines)
+    
+    def _format_log_food_result(self, result: Dict) -> str:
+        """Format log_food result into natural language"""
+        message = result.get("message", "")
+        logged_item = result.get("logged_item", {})
+        
+        answer_parts = []
+        if message:
+            answer_parts.append(message)
+        
+        # Add nutrition info if available
+        if logged_item:
+            nutrition = logged_item.get("nutrition", {})
+            if nutrition:
+                cal = nutrition.get("calories", 0)
+                protein = nutrition.get("protein_g", 0)
+                carbs = nutrition.get("carbs_g", 0)
+                fat = nutrition.get("fat_g", 0)
+                answer_parts.append(
+                    f"\n📊 Giá trị dinh dưỡng: {cal} kcal, "
+                    f"Protein: {protein}g, Carbs: {carbs}g, Fat: {fat}g"
+                )
+        
+        return "\n".join(answer_parts) if answer_parts else "Đã ghi nhận thành công!"
+    
+    def _format_find_alternatives_result(self, result: Dict) -> str:
+        """Format find_alternatives result into natural language"""
+        original = result.get("original_food", "")
+        criteria = result.get("criteria", "")
+        alternatives = result.get("alternatives", [])
+        count = result.get("count", 0)
+        
+        if count == 0:
+            return f"Không tìm thấy alternatives cho '{original}' phù hợp với '{criteria}'."
+        
+        lines = [f"🥗 **Alternatives cho '{original}'** ({criteria}):\n"]
+        for i, alt in enumerate(alternatives[:5], 1):
+            name = alt.get("name", "Không có tên")
+            info = alt.get("info", "")[:100]
+            lines.append(f"{i}. **{name}**")
+            if info:
+                lines.append(f"   {info}...")
+        
+        return "\n".join(lines)
+    
+    def _format_adjust_goal_result(self, result: Dict) -> str:
+        """Format adjust_goal result into natural language"""
+        message = result.get("message", "")
+        updated_goal = result.get("updated_goal", {})
+        
+        answer = message if message else "Đã cập nhật mục tiêu thành công!"
+        
+        if updated_goal:
+            goal_type = updated_goal.get("goal_type", "")
+            target = updated_goal.get("target_value", "")
+            if goal_type and target:
+                answer += f"\n📋 Mục tiêu mới: {goal_type} = {target}"
+        
+        return answer
+    
+    def _format_meal_plan_result(self, result: Dict) -> str:
+        """Format regenerate_meal_plan result into natural language"""
+        plan = result.get("plan", {})
+        message = result.get("message", "")
+        
+        if message:
+            return message
+        
+        days = plan.get("days", 0)
+        preferences = plan.get("preferences", "")
+        
+        return (
+            f"✅ Đã tạo meal plan cho {days} ngày"
+            + (f" với preferences: {preferences}" if preferences else "")
+        )
+    
+    def _format_progress_insight_result(self, result: Dict) -> str:
+        """Format get_progress_insight result into natural language"""
+        insights = result.get("insights", {})
+        timeframe = result.get("timeframe", "")
+        
+        weekly_summary = insights.get("weekly_summary", {})
+        if weekly_summary:
+            avg_cal = weekly_summary.get("average_calories", 0)
+            total_days = weekly_summary.get("total_days", 0)
+            
+            return (
+                f"📊 **Tiến độ {timeframe}:**\n"
+                f"- Trung bình calories/ngày: {avg_cal} kcal\n"
+                f"- Số ngày đã ghi nhận: {total_days}"
+            )
+        
+        return f"📊 Đã lấy thông tin tiến độ cho {timeframe}"
+    
+    def _format_weekly_insights_result(self, result: Dict) -> str:
+        """Format get_weekly_insights result into natural language"""
+        summary = result.get("summary", "")
+        highlights = result.get("highlights", [])
+        concerns = result.get("concerns", [])
+        recommendations = result.get("recommendations", [])
+        
+        lines = []
+        
+        if summary:
+            lines.append(f"📝 **Tóm tắt tuần qua:**\n{summary}\n")
+        
+        if highlights:
+            lines.append("✨ **Điểm sáng:**")
+            for h in highlights[:3]:
+                lines.append(f"   • {h}")
+            lines.append("")
+        
+        if concerns:
+            lines.append("⚠️ **Cần lưu ý:**")
+            for c in concerns[:3]:
+                lines.append(f"   • {c}")
+            lines.append("")
+        
+        if recommendations:
+            lines.append("💡 **Khuyến nghị:**")
+            for r in recommendations[:3]:
+                lines.append(f"   • {r}")
+        
+        return "\n".join(lines) if lines else "Không có dữ liệu để phân tích tuần này."
+    
+    def _format_goal_analysis_result(self, result: Dict) -> str:
+        """Format get_goal_analysis result into natural language"""
+        status = result.get("status_message", "")
+        assessment = result.get("progress_assessment", "")
+        recommendations = result.get("recommendations", [])
+        motivation = result.get("motivation", "")
+        
+        lines = []
+        
+        if status:
+            lines.append(f"🎯 {status}\n")
+        
+        if assessment:
+            lines.append(assessment)
+            lines.append("")
+        
+        if recommendations:
+            lines.append("💡 **Gợi ý:**")
+            for r in recommendations[:3]:
+                lines.append(f"   • {r}")
+            lines.append("")
+        
+        if motivation:
+            lines.append(f"🌟 {motivation}")
+        
+        return "\n".join(lines) if lines else "Không có thông tin về mục tiêu."
+    
+    def _format_nutrition_trends_result(self, result: Dict) -> str:
+        """Format get_nutrition_trends result into natural language"""
+        analysis = result.get("analysis", {})
+        insights = result.get("insights", "")
+        period = result.get("period_days", 30)
+        
+        lines = [f"📈 **Xu hướng dinh dưỡng {period} ngày:**\n"]
+        
+        if insights:
+            lines.append(insights)
+        
+        message = analysis.get("message", "")
+        if message:
+            lines.append(f"\n{message}")
+        
+        return "\n".join(lines) if lines else f"Không có dữ liệu xu hướng cho {period} ngày."
+    
+    def _format_generic_result(self, result: Dict) -> str:
+        """Generic formatter for unknown function results"""
+        # Try to extract meaningful info from the result
+        if "message" in result:
+            return result["message"]
+        if "data" in result:
+            return str(result["data"])
+        
+        # Last resort: pretty print the result
+        import json
+        try:
+            return json.dumps(result, ensure_ascii=False, indent=2)[:500]
+        except:
+            return str(result)[:500]
 
 
 def get_chat_service(

@@ -11,19 +11,19 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime, date, timedelta
 import httpx
 from decimal import Decimal
+import json
+import re
+
+from google import genai
+from google.genai import types
 
 from app.config import settings
-import google.generativeai as genai
 
 logger = logging.getLogger(__name__)
 
-# Configure Gemini
-genai.configure(api_key=settings.GOOGLE_API_KEY)
+# Configure Gemini client
+client = genai.Client(api_key=settings.GOOGLE_API_KEY)
 
-
-# ==========================================
-# ANALYTICS INSIGHTS SERVICE
-# ==========================================
 
 class AnalyticsInsightsService:
     """
@@ -45,9 +45,22 @@ class AnalyticsInsightsService:
         """
         self.backend_url = backend_url.rstrip("/")
         self.analytics_base_url = f"{self.backend_url}/api/v1/analytics"
-        self.model = genai.GenerativeModel(settings.GEMINI_MODEL)
+        self.model_name = settings.GEMINI_MODEL
         logger.info(f"✅ AnalyticsInsightsService initialized (backend: {backend_url})")
-    
+
+    async def _generate_content(self, prompt: str, max_tokens: int = 2048, temperature: float = 0.3) -> str:
+        """Generate content using the new SDK"""
+        response = client.models.generate_content(
+            model=self.model_name,
+            contents=[types.Content(role="user", parts=[types.Part(text=prompt)])],
+            config=types.GenerateContentConfig(
+                temperature=temperature,
+                max_output_tokens=max_tokens,
+                top_p=0.95,
+                top_k=40
+            )
+        )
+        return response.text
     
     # ==========================================
     # DATA FETCHING (from Backend)
@@ -73,11 +86,10 @@ class AnalyticsInsightsService:
         
         headers = {"Authorization": f"Bearer {user_token}"}
         
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient() as http_client:
             try:
-                # Fetch multiple endpoints in parallel
                 tasks = [
-                    client.get(
+                    http_client.get(
                         f"{self.analytics_base_url}/nutrition-trends",
                         params={
                             "start_date": start_date.isoformat(),
@@ -86,21 +98,21 @@ class AnalyticsInsightsService:
                         },
                         headers=headers
                     ),
-                    client.get(
+                    http_client.get(
                         f"{self.analytics_base_url}/weight-progress",
                         params={"days": days},
                         headers=headers
                     ),
-                    client.get(
+                    http_client.get(
                         f"{self.analytics_base_url}/goal-progress",
                         headers=headers
                     ),
-                    client.get(
+                    http_client.get(
                         f"{self.analytics_base_url}/meal-patterns",
                         params={"days": days},
                         headers=headers
                     ),
-                    client.get(
+                    http_client.get(
                         f"{self.analytics_base_url}/calorie-comparison",
                         params={
                             "start_date": start_date.isoformat(),
@@ -112,7 +124,6 @@ class AnalyticsInsightsService:
                 
                 responses = await asyncio.gather(*tasks, return_exceptions=True)
                 
-                # Parse responses
                 data = {
                     "nutrition_trends": responses[0].json() if not isinstance(responses[0], Exception) else None,
                     "weight_progress": responses[1].json() if not isinstance(responses[1], Exception) else None,
@@ -128,7 +139,6 @@ class AnalyticsInsightsService:
                 logger.error(f"❌ Error fetching analytics data: {e}")
                 raise
     
-    
     # ==========================================
     # INSIGHT GENERATION
     # ==========================================
@@ -138,38 +148,14 @@ class AnalyticsInsightsService:
         user_token: str,
         language: str = "vi"
     ) -> Dict[str, Any]:
-        """
-        Generate comprehensive weekly insights using AI
-        
-        Args:
-            user_token: User JWT token
-            language: Output language (vi/en)
-            
-        Returns:
-            {
-                "period": "last_7_days",
-                "summary": "Natural language summary",
-                "highlights": ["Achievement 1", "Achievement 2"],
-                "concerns": ["Concern 1", "Concern 2"],
-                "recommendations": ["Recommendation 1", "Recommendation 2"],
-                "data": {...raw data...}
-            }
-        """
-        # Fetch data
+        """Generate comprehensive weekly insights using AI"""
         data = await self.fetch_analytics_data(user_token, days=7)
-        
-        # Build prompt for Gemini
         prompt = self._build_insights_prompt(data, language)
         
-        # Generate insights with Gemini
         try:
-            response = await self.model.generate_content_async(prompt)
-            insights_text = response.text
-            
-            # Parse structured insights from AI response
+            insights_text = await self._generate_content(prompt)
             insights = self._parse_ai_insights(insights_text)
             
-            # Add raw data
             insights["data"] = data
             insights["period"] = "last_7_days"
             insights["generated_at"] = datetime.now().isoformat()
@@ -181,43 +167,27 @@ class AnalyticsInsightsService:
             logger.error(f"❌ Error generating insights: {e}")
             raise
     
-    
     async def generate_goal_progress_insights(
         self,
         user_token: str,
         language: str = "vi"
     ) -> Dict[str, Any]:
-        """
-        Generate insights specifically for goal progress
-        
-        Args:
-            user_token: User JWT token
-            language: Output language (vi/en)
-            
-        Returns:
-            Goal-specific insights with recommendations
-        """
+        """Generate insights specifically for goal progress"""
         headers = {"Authorization": f"Bearer {user_token}"}
         
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient() as http_client:
             try:
-                # Fetch goal progress
-                response = await client.get(
+                response = await http_client.get(
                     f"{self.analytics_base_url}/goal-progress",
                     headers=headers
                 )
 
                 if response.status_code == 404:
-                    logger.info("ℹ️ Goal insights requested but user has no active goal")
                     return {
                         "status_message": "Bạn chưa có mục tiêu hoạt động",
-                        "progress_assessment": "Hiện chưa có dữ liệu mục tiêu để phân tích tiến độ. Hãy tạo goal trước để nhận đánh giá AI chính xác hơn.",
-                        "recommendations": [
-                            "Tạo mục tiêu cân nặng hoặc calories trong app backend",
-                            "Thiết lập mốc thời gian và chỉ số mục tiêu cụ thể",
-                            "Ghi log bữa ăn hằng ngày để hệ thống theo dõi tiến độ"
-                        ],
-                        "motivation": "Bắt đầu từ một mục tiêu nhỏ để dễ duy trì thói quen.",
+                        "progress_assessment": "Hiện chưa có dữ liệu mục tiêu để phân tích tiến độ.",
+                        "recommendations": ["Tạo mục tiêu cân nặng hoặc calories"],
+                        "motivation": "Bắt đầu từ một mục tiêu nhỏ.",
                         "data": {},
                         "generated_at": datetime.now().isoformat()
                     }
@@ -226,13 +196,9 @@ class AnalyticsInsightsService:
                     raise ValueError(f"Failed to fetch goal progress: {response.status_code}")
                 
                 goal_data = response.json()
-                
-                # Build prompt
                 prompt = self._build_goal_insights_prompt(goal_data, language)
-                
-                # Generate with AI
-                ai_response = await self.model.generate_content_async(prompt)
-                insights = self._parse_goal_insights(ai_response.text)
+                ai_response_text = await self._generate_content(prompt)
+                insights = self._parse_goal_insights(ai_response_text)
                 
                 insights["data"] = goal_data
                 insights["generated_at"] = datetime.now().isoformat()
@@ -244,33 +210,20 @@ class AnalyticsInsightsService:
                 logger.error(f"❌ Error generating goal insights: {e}")
                 raise
     
-    
     async def generate_nutrition_trend_insights(
         self,
         user_token: str,
         days: int = 30,
         language: str = "vi"
     ) -> Dict[str, Any]:
-        """
-        Generate insights about nutrition trends over time
-        
-        Args:
-            user_token: User JWT token
-            days: Number of days to analyze
-            language: Output language (vi/en)
-            
-        Returns:
-            Trend analysis with patterns and recommendations
-        """
+        """Generate insights about nutrition trends over time"""
         today = date.today()
         start_date = today - timedelta(days=days)
-        
         headers = {"Authorization": f"Bearer {user_token}"}
         
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient() as http_client:
             try:
-                # Fetch nutrition trends
-                response = await client.get(
+                response = await http_client.get(
                     f"{self.analytics_base_url}/nutrition-trends",
                     params={
                         "start_date": start_date.isoformat(),
@@ -284,29 +237,21 @@ class AnalyticsInsightsService:
                     raise ValueError(f"Failed to fetch nutrition trends: {response.status_code}")
                 
                 trends_data = response.json()
-                
-                # Analyze trends
                 analysis = self._analyze_trends(trends_data.get("trends", []))
-                
-                # Generate AI insights
                 prompt = self._build_trend_insights_prompt(trends_data, analysis, language)
-                ai_response = await self.model.generate_content_async(prompt)
+                ai_response_text = await self._generate_content(prompt)
                 
-                insights = {
+                return {
                     "period_days": days,
                     "analysis": analysis,
-                    "insights": ai_response.text,
+                    "insights": ai_response_text,
                     "data": trends_data,
                     "generated_at": datetime.now().isoformat()
                 }
                 
-                logger.info(f"✅ Generated nutrition trend insights ({days} days, {language})")
-                return insights
-                
             except Exception as e:
                 logger.error(f"❌ Error generating trend insights: {e}")
                 raise
-    
     
     # ==========================================
     # PROMPT BUILDING
@@ -314,20 +259,17 @@ class AnalyticsInsightsService:
     
     def _build_insights_prompt(self, data: Dict, language: str) -> str:
         """Build prompt for weekly insights generation"""
-        
         lang_instructions = {
             "vi": "Trả lời bằng tiếng Việt tự nhiên, thân thiện",
             "en": "Respond in natural, friendly English"
         }
         
-        # Extract key metrics
         nutrition = data.get("nutrition_trends", {}).get("trends", [])
         weight = data.get("weight_progress", {})
         goal = data.get("goal_progress", {})
         patterns = data.get("meal_patterns", {})
         comparison = data.get("calorie_comparison", {})
         
-        # Calculate averages
         if nutrition:
             avg_calories = sum(d.get("total_calories", 0) for d in nutrition) / len(nutrition)
             avg_protein = sum(d.get("total_protein_g", 0) for d in nutrition) / len(nutrition)
@@ -350,57 +292,27 @@ Bạn là chuyên gia dinh dưỡng AI của NutriAI. Phân tích dữ liệu di
 - Cân nặng bắt đầu: {weight.get('starting_weight', 'N/A')} kg
 - Cân nặng hiện tại: {weight.get('current_weight', 'N/A')} kg
 - Thay đổi: {weight.get('change_kg', 0)} kg
-- Xu hướng: {weight.get('trend', 'no_data')}
 
 **3. Goal Progress:**
 - Loại mục tiêu: {goal.get('goal_type', 'N/A')}
 - Tiến độ: {goal.get('progress_percent', 0):.1f}%
 - Mục tiêu calories hàng ngày: {goal.get('daily_calorie_target', 'N/A')} kcal
-- Tình trạng: {goal.get('status', 'N/A')}
 
-**4. Calorie Adherence:**
-- Số ngày tuân thủ mục tiêu: {comparison.get('days_on_track', 0)}/{comparison.get('days_tracked', 0)}
-- Tỷ lệ tuân thủ: {comparison.get('adherence_rate', 0):.1f}%
-
-**5. Meal Patterns:**
-{patterns.get('patterns', {})}
-
-**YÊU CẦU TRẢ LỜI (định dạng STRICT):**
-
-Trả lời theo cấu trúc JSON này (KHÔNG thêm markdown, KHÔNG thêm ```json):
+**YÊU CẦU TRẢ LỜI (định dạng STRICT JSON):**
 
 {{
   "summary": "Tổng quan ngắn gọn về tuần qua (2-3 câu)",
-  "highlights": [
-    "Điểm nổi bật tích cực 1",
-    "Điểm nổi bật tích cực 2",
-    "Điểm nổi bật tích cực 3"
-  ],
-  "concerns": [
-    "Vấn đề cần lưu ý 1",
-    "Vấn đề cần lưu ý 2"
-  ],
-  "recommendations": [
-    "Khuyến nghị cụ thể 1 (actionable)",
-    "Khuyến nghị cụ thể 2 (actionable)",
-    "Khuyến nghị cụ thể 3 (actionable)"
-  ]
+  "highlights": ["Điểm nổi bật tích cực 1", "Điểm nổi bật tích cực 2"],
+  "concerns": ["Vấn đề cần lưu ý 1"],
+  "recommendations": ["Khuyến nghị cụ thể 1", "Khuyến nghị cụ thể 2"]
 }}
 
-**LƯU Ý:**
-- Phân tích dựa trên dữ liệu thực tế
-- Highlights: Thành tựu, điểm mạnh (nếu có tiến bộ)
-- Concerns: Vấn đề cần cải thiện (nếu có)
-- Recommendations: Cụ thể, thực tế, có thể thực hiện ngay
-- Nếu không có data, nói rõ "Chưa có đủ dữ liệu để phân tích"
+Không thêm markdown, không thêm ```json.
 """
-        
         return prompt
-    
     
     def _build_goal_insights_prompt(self, goal_data: Dict, language: str) -> str:
         """Build prompt for goal progress insights"""
-        
         lang_instructions = {
             "vi": "Trả lời bằng tiếng Việt",
             "en": "Respond in English"
@@ -416,11 +328,7 @@ Bạn là chuyên gia dinh dưỡng AI. Phân tích tiến độ mục tiêu c�
 - Cân nặng bắt đầu: {goal_data.get('starting_weight')} kg
 - Cân nặng hiện tại: {goal_data.get('current_weight')} kg
 - Cân nặng mục tiêu: {goal_data.get('target_weight')} kg
-- Thay đổi: {goal_data.get('weight_change')} kg
-- Còn lại: {goal_data.get('remaining')} kg
 - Tiến độ: {goal_data.get('progress_percent')}%
-- Số ngày đã trôi qua: {goal_data.get('days_elapsed')}
-- Số ngày còn lại: {goal_data.get('days_to_target')}
 - Mục tiêu calories: {goal_data.get('daily_calorie_target')} kcal/ngày
 
 **YÊU CẦU TRẢ LỜI (JSON format):**
@@ -428,28 +336,16 @@ Bạn là chuyên gia dinh dưỡng AI. Phân tích tiến độ mục tiêu c�
 {{
   "status_message": "Đánh giá tình trạng hiện tại (1 câu)",
   "progress_assessment": "Phân tích chi tiết tiến độ (2-3 câu)",
-  "recommendations": [
-    "Khuyến nghị 1",
-    "Khuyến nghị 2",
-    "Khuyến nghị 3"
-  ],
+  "recommendations": ["Khuyến nghị 1", "Khuyến nghị 2"],
   "motivation": "Lời động viên (1 câu)"
 }}
 
 Không thêm markdown, không thêm ```json.
 """
-        
         return prompt
     
-    
-    def _build_trend_insights_prompt(
-        self,
-        trends_data: Dict,
-        analysis: Dict,
-        language: str
-    ) -> str:
+    def _build_trend_insights_prompt(self, trends_data: Dict, analysis: Dict, language: str) -> str:
         """Build prompt for nutrition trend insights"""
-        
         prompt = f"""
 Bạn là chuyên gia dinh dưỡng AI. Phân tích xu hướng dinh dưỡng.
 
@@ -458,39 +354,25 @@ Bạn là chuyên gia dinh dưỡng AI. Phân tích xu hướng dinh dưỡng.
 **PHÂN TÍCH XU HƯỚNG:**
 - Tổng số ngày: {len(trends_data.get('trends', []))}
 - Calories trung bình: {analysis.get('avg_calories', 0):.0f} kcal/ngày
-- Xu hướng calories: {analysis.get('calorie_trend', 'stable')}
 - Protein trung bình: {analysis.get('avg_protein', 0):.0f}g/ngày
-- Xu hướng protein: {analysis.get('protein_trend', 'stable')}
-- Ngày ghi nhận đầy đủ: {analysis.get('consistent_days', 0)}/{len(trends_data.get('trends', []))}
 
 **YÊU CẦU:**
 
 Tạo phân tích tự nhiên (2-4 đoạn văn) về:
 1. Tổng quan xu hướng
 2. Các pattern đáng chú ý
-3. Đánh giá tính consistency
-4. Khuyến nghị cải thiện
+3. Khuyến nghị cải thiện
 
 Trả lời trực tiếp bằng tự nhiên (KHÔNG dùng JSON, KHÔNG dùng markdown format).
 """
-        
         return prompt
-    
     
     # ==========================================
     # DATA ANALYSIS
     # ==========================================
     
     def _analyze_trends(self, trends: List[Dict]) -> Dict:
-        """
-        Analyze nutrition trends to detect patterns
-        
-        Args:
-            trends: List of daily nutrition data
-            
-        Returns:
-            Analysis summary with detected patterns
-        """
+        """Analyze nutrition trends to detect patterns"""
         if not trends:
             return {
                 "avg_calories": 0,
@@ -502,7 +384,6 @@ Trả lời trực tiếp bằng tự nhiên (KHÔNG dùng JSON, KHÔNG dùng ma
                 "consistent_days": 0
             }
         
-        # Calculate averages
         calories = [t.get("total_calories", 0) for t in trends]
         proteins = [t.get("total_protein_g", 0) for t in trends]
         carbs = [t.get("total_carbs_g", 0) for t in trends]
@@ -513,11 +394,8 @@ Trả lời trực tiếp bằng tự nhiên (KHÔNG dùng JSON, KHÔNG dùng ma
         avg_carbs = sum(carbs) / len(carbs) if carbs else 0
         avg_fat = sum(fats) / len(fats) if fats else 0
         
-        # Detect trends (simple linear trend detection)
         calorie_trend = self._detect_trend(calories)
         protein_trend = self._detect_trend(proteins)
-        
-        # Count consistent days (days with reasonable calorie intake)
         consistent_days = sum(1 for c in calories if 1000 <= c <= 3000)
         
         return {
@@ -531,17 +409,11 @@ Trả lời trực tiếp bằng tự nhiên (KHÔNG dùng JSON, KHÔNG dùng ma
             "total_days": len(trends)
         }
     
-    
     def _detect_trend(self, values: List[float]) -> str:
-        """
-        Simple trend detection
-        
-        Returns: "increasing", "decreasing", "stable"
-        """
+        """Simple trend detection"""
         if len(values) < 3:
             return "insufficient_data"
         
-        # Split into halves and compare averages
         mid = len(values) // 2
         first_half = sum(values[:mid]) / mid
         second_half = sum(values[mid:]) / (len(values) - mid)
@@ -555,40 +427,21 @@ Trả lời trực tiếp bằng tự nhiên (KHÔNG dùng JSON, KHÔNG dùng ma
         else:
             return "stable"
     
-    
     # ==========================================
     # RESPONSE PARSING
     # ==========================================
     
     def _parse_ai_insights(self, ai_response: str) -> Dict:
-        """
-        Parse AI-generated insights from text to structured format
-        
-        Args:
-            ai_response: Raw AI response text
-            
-        Returns:
-            Structured insights dict
-        """
-        import json
-        import re
-        
+        """Parse AI-generated insights from text to structured format"""
         try:
-            # Try to extract JSON from response
-            # Remove markdown code blocks if present
             cleaned = re.sub(r'```json\s*', '', ai_response)
             cleaned = re.sub(r'```\s*', '', cleaned)
             cleaned = cleaned.strip()
-            
-            # Parse JSON
             insights = json.loads(cleaned)
-            
             return insights
             
         except json.JSONDecodeError as e:
             logger.warning(f"⚠️  Failed to parse AI insights as JSON: {e}")
-            
-            # Fallback: Return raw text
             return {
                 "summary": ai_response[:200],
                 "highlights": [],
@@ -596,17 +449,12 @@ Trả lời trực tiếp bằng tự nhiên (KHÔNG dùng JSON, KHÔNG dùng ma
                 "recommendations": []
             }
     
-    
     def _parse_goal_insights(self, ai_response: str) -> Dict:
         """Parse goal-specific AI insights"""
-        import json
-        import re
-        
         try:
             cleaned = re.sub(r'```json\s*', '', ai_response)
             cleaned = re.sub(r'```\s*', '', cleaned)
             cleaned = cleaned.strip()
-            
             insights = json.loads(cleaned)
             return insights
             
@@ -618,10 +466,6 @@ Trả lời trực tiếp bằng tự nhiên (KHÔNG dùng JSON, KHÔNG dùng ma
                 "motivation": "Tiếp tục phấn đấu!"
             }
 
-
-# ==========================================
-# SERVICE FACTORY
-# ==========================================
 
 _service_instance: Optional[AnalyticsInsightsService] = None
 

@@ -98,16 +98,17 @@ Bạn là chuyên gia dinh dưỡng AI của NutriAI, chuyên tư vấn về cal
 **Câu hỏi:**
 {question}
 
-**Yêu cầu trả lời:**
-1. Nếu có "Lịch sử trò chuyện", tham khảo để hiểu ngữ cảnh câu hỏi
-2. Trả lời ngắn gọn, rõ ràng, nhưng phải đầy đủ thông tin (2-4 câu)
-3. Ưu tiên thông tin từ "Ngữ cảnh" (đã được xác nhận)
-4. Nếu liên quan đến mục tiêu người dùng, đưa ra gợi ý cụ thể
-5. Nếu không có thông tin trong ngữ cảnh, nói rõ "Tôi không có đủ thông tin trong cơ sở dữ liệu..."
-6. Sử dụng tiếng Việt tự nhiên, thân thiện
-7. Nếu có số liệu, trích dẫn rõ ràng từ tài liệu
+**YÊU CẦU QUAN TRỌNG:**
+1. Chỉ trả lời bằng tiếng Việt tự nhiên
+2. Trả lời đầy đủ, không cắt ngắn (tối thiểu 3-5 câu)
+3. Ưu tiên thông tin từ "Ngữ cảnh" nếu có
+4. Nếu không có thông tin, nói rõ và gợi ý câu hỏi khác
+5. KHÔNG trả lời bằng tiếng Anh
+6. KHÔNG viết internal thoughts, reasoning, hay meta-comments
+7. KHÔNG viết như "The user is asking...", "Based on the context..."
+8. Trả lời TRỰC TIẾP như đang nói chuyện với người dùng
 
-**Trả lời:**
+**Trả lời (chỉ nội dung trả lời, không thêm gì khác):**
 """
     
     return prompt.strip()

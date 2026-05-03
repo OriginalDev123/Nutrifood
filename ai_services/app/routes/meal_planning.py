@@ -16,6 +16,13 @@ router = APIRouter(
 )
 
 
+class HealthProfileInfo(BaseModel):
+    """Health profile information for meal planning"""
+    health_conditions: List[str] = Field(default_factory=list, description="Health conditions (e.g., diabetes, hypertension)")
+    food_allergies: List[str] = Field(default_factory=list, description="Food allergies to avoid (e.g., seafood, peanuts)")
+    dietary_preferences: List[str] = Field(default_factory=list, description="Dietary preferences (e.g., Low Carb, Keto, Vegetarian)")
+
+
 class MealPlanningRequest(BaseModel):
     """Request model for meal planning"""
     
@@ -24,6 +31,7 @@ class MealPlanningRequest(BaseModel):
     goal_type: str = Field("maintain", pattern="^(weight_loss|weight_gain|maintain|healthy_lifestyle)$")
     preferences: Optional[Dict[str, Any]] = Field(None, description="User preferences")
     available_foods: Optional[List[Dict]] = Field(None, description="Available foods from database")
+    health_profile: Optional[HealthProfileInfo] = Field(None, description="User's health profile for filtering")
     language: str = Field("vi", pattern="^(vi|en)$")
     
     class Config:
@@ -36,6 +44,11 @@ class MealPlanningRequest(BaseModel):
                 "available_foods": [
                     {"name_vi": "Cơm trắng", "calories": 260, "protein": 5, "carbs": 57, "fat": 0.5}
                 ],
+                "health_profile": {
+                    "health_conditions": ["Tiểu đường type 2"],
+                    "food_allergies": ["Hải sản", "Tôm"],
+                    "dietary_preferences": ["Low Carb"]
+                },
                 "language": "vi"
             }
         }
@@ -49,6 +62,9 @@ class MealResponse(BaseModel):
     protein_g: float = Field(..., ge=0)
     carbs_g: float = Field(..., ge=0)
     fat_g: float = Field(..., ge=0)
+    is_custom: bool = Field(default=False, description="Whether this is a custom AI-created dish")
+    ingredients: Optional[List[str]] = Field(default=None, description="Main ingredients for custom dishes")
+    recipe_notes: Optional[str] = Field(default=None, description="Brief cooking instructions for custom dishes")
 
 
 class DayPlan(BaseModel):
@@ -74,7 +90,19 @@ class MealPlanResponse(BaseModel):
                                 "calories": 350,
                                 "protein_g": 15,
                                 "carbs_g": 40,
-                                "fat_g": 12
+                                "fat_g": 12,
+                                "is_custom": False
+                            },
+                            {
+                                "meal_type": "lunch",
+                                "food_name": "Salad ức gà Keto",
+                                "calories": 350,
+                                "protein_g": 35,
+                                "carbs_g": 8,
+                                "fat_g": 20,
+                                "is_custom": True,
+                                "ingredients": ["ức gà", "xà lách", "bơ", "dầu olive", "trứng"],
+                                "recipe_notes": "Nướng ức gà, xé nhỏ, trộn với rau và sốt"
                             }
                         ]
                     }
@@ -94,6 +122,8 @@ async def generate_meal_plan(request: MealPlanningRequest):
     - Balances macros across meals
     - Diversifies diet (no repetition within 3 days)
     - Optionally uses available foods from database
+    - **CAN CREATE CUSTOM DISHES** not in database when needed
+    - Respects health profile (allergies, conditions, dietary preferences)
     
     **Parameters:**
     - daily_calorie_target: Target calories per day (500-5000)
@@ -101,13 +131,24 @@ async def generate_meal_plan(request: MealPlanningRequest):
     - goal_type: weight_loss, weight_gain, maintain, healthy_lifestyle
     - preferences: Optional filters (tags, categories, etc.)
     - available_foods: List of foods to choose from
+    - health_profile: User's health profile for filtering (allergies, conditions, preferences)
     - language: vi (Vietnamese) or en (English)
     
     **Returns:**
     - Complete meal plan with days and meals
+    - Custom dishes include ingredients and recipe notes
     """
     try:
         service = get_meal_planning_ai_service()
+        
+        # Convert health_profile to dict if provided
+        health_profile_dict = None
+        if request.health_profile:
+            health_profile_dict = {
+                "health_conditions": request.health_profile.health_conditions or [],
+                "food_allergies": request.health_profile.food_allergies or [],
+                "dietary_preferences": request.health_profile.dietary_preferences or [],
+            }
         
         result = await service.generate_meal_plan(
             daily_calorie_target=request.daily_calorie_target,
@@ -115,6 +156,7 @@ async def generate_meal_plan(request: MealPlanningRequest):
             goal_type=request.goal_type,
             preferences=request.preferences,
             available_foods=request.available_foods,
+            health_profile=health_profile_dict,
             language=request.language
         )
         
@@ -136,13 +178,15 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "Meal Planning AI Service",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "model": "gemini-2.5-flash",
         "features": [
             "AI-powered meal selection",
             "Calorie-based planning",
             "Goal-specific distributions",
             "Macro balancing",
-            "Diet diversification"
+            "Diet diversification",
+            "Custom dish creation",
+            "Health profile filtering (allergies, conditions, preferences)"
         ]
     }

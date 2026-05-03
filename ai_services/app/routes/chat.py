@@ -105,7 +105,7 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = Field(None, description="Session ID for conversation continuity (⭐ NEW - Task 9!)")
     user_context: Optional[UserContext] = Field(None, description="Optional user context")
     top_k: Optional[int] = Field(3, description="Number of documents to retrieve", ge=1, le=10)
-    score_threshold: Optional[float] = Field(0.35, description="Minimum relevance score (optimized for Vietnamese)", ge=0.0, le=1.0)
+    score_threshold: Optional[float] = Field(0.20, description="Minimum relevance score (optimized for Vietnamese)", ge=0.0, le=1.0)
     
     class Config:
         json_schema_extra = {
@@ -327,7 +327,7 @@ async def rag_quick_test(
             question=question,
             user_context=None,
             top_k=3,
-            score_threshold=0.35
+            score_threshold=0.20
         )
         
         return {

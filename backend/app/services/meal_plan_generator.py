@@ -629,6 +629,221 @@ def _get_mock_meal_plan(
     return meal_plan
 
 
+# ==========================================
+# AI SERVICE INTEGRATION
+# ==========================================
+
+def _get_available_foods_for_ai(db: Session, limit: int = 50) -> List[Dict]:
+    """
+    Get available foods from database for AI to reference.
+    Returns list of foods with nutrition info.
+    """
+    foods = db.query(Recipe).filter(
+        Recipe.is_deleted == False,
+        Recipe.is_public == True,
+        Recipe.calories_per_serving.isnot(None)
+    ).limit(limit).all()
+    
+    return [
+        {
+            "name_vi": f.name_vi,
+            "calories": float(f.calories_per_serving or 0),
+            "protein_g": float(f.protein_per_serving or 0),
+            "carbs_g": float(f.carbs_per_serving or 0),
+            "fat_g": float(f.fat_per_serving or 0),
+            "tags": f.tags or [],
+            "category": f.category
+        }
+        for f in foods
+    ]
+
+
+async def _call_ai_meal_planning(
+    daily_calorie_target: int,
+    days: int,
+    goal_type: str,
+    preferences: Optional[Dict],
+    available_foods: List[Dict],
+    health_profile: Optional[Dict]
+) -> Dict:
+    """
+    Call AI meal planning service via HTTP API.
+    This runs in a separate thread to avoid blocking the event loop.
+    """
+    import httpx
+    import os
+    
+    # Get AI service URL from environment or use default Docker service name
+    ai_service_url = os.environ.get("AI_SERVICE_URL", "http://ai_service:8001")
+    api_endpoint = f"{ai_service_url}/meal-planning/generate"
+    
+    # Build request payload for AI service
+    payload = {
+        "daily_calorie_target": daily_calorie_target,
+        "days": days,
+        "goal_type": goal_type,
+        "preferences": preferences,
+        "available_foods": available_foods if available_foods else None,
+        "health_profile": health_profile,
+        "language": "vi"
+    }
+    
+    print(f"🤖 Calling AI service at {api_endpoint}...")
+    
+    # Run HTTP request in thread pool since httpx is sync
+    import asyncio
+    loop = asyncio.get_event_loop()
+    
+    async def _make_request():
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(api_endpoint, json=payload)
+            response.raise_for_status()
+            return response.json()
+    
+    result = await _make_request()
+    print(f"✅ AI service returned meal plan with {len(result.get('days', []))} days")
+    return result
+
+
+def _convert_ai_result_to_meal_plan(
+    db: Session,
+    user_id: UUID,
+    plan_name: str,
+    ai_result: Dict,
+    days: int,
+    health_profile: Optional[Dict] = None
+) -> MealPlan:
+    """
+    Convert AI-generated meal plan to database MealPlan.
+    Handles both database recipes and custom AI-created dishes.
+    """
+    from app.services.meal_plan_service import create_meal_plan
+    from app.schemas.meal_plan import MealPlanCreate
+    
+    start_date = date.today()
+    end_date = start_date + timedelta(days=days - 1)
+    
+    # Count custom dishes for logging
+    custom_count = sum(
+        1 for day in ai_result.get('days', [])
+        for meal in day.get('meals', [])
+        if meal.get('is_custom', False)
+    )
+    
+    meal_plan = create_meal_plan(db, user_id, MealPlanCreate(
+        plan_name=plan_name,
+        start_date=start_date,
+        end_date=end_date,
+        servings=1,
+        preferences={
+            "source": "ai",
+            "custom_dishes_count": custom_count,
+            "health_profile": health_profile
+        }
+    ))
+    
+    day_offset = 0
+    for day_data in ai_result.get("days", []):
+        day_offset += 1
+        current_date = start_date + timedelta(days=day_offset - 1)
+        
+        order_index = 0
+        for meal in day_data.get("meals", []):
+            meal_type = meal.get("meal_type", "snack")
+            is_custom = meal.get("is_custom", False)
+            food_name = meal.get("food_name", "Unknown")
+            
+            # Build notes
+            if is_custom:
+                notes = f"Custom: {food_name}"
+                # Add ingredients if available
+                ingredients = meal.get("ingredients", [])
+                if ingredients:
+                    notes += f" | Nguyên liệu: {', '.join(ingredients)}"
+            else:
+                notes = f"Recipe: {food_name}"
+            
+            item = MealPlanItem(
+                meal_plan_id=meal_plan.plan_id,
+                food_id=None,  # Custom dishes don't have food_id
+                day_date=current_date,
+                meal_type=meal_type,
+                serving_size_g=Decimal("100"),
+                quantity=Decimal("1"),
+                calories=Decimal(str(meal.get("calories", 0))),
+                protein_g=Decimal(str(meal.get("protein_g", 0))),
+                carbs_g=Decimal(str(meal.get("carbs_g", 0))),
+                fat_g=Decimal(str(meal.get("fat_g", 0))),
+                unit="serving",
+                notes=notes,
+                order_index=order_index
+            )
+            
+            db.add(item)
+            order_index += 1
+    
+    db.commit()
+    db.refresh(meal_plan)
+    
+    print(f"✅ Created AI meal plan: {meal_plan.plan_id} with {custom_count} custom dishes")
+    return meal_plan
+
+
+def _generate_with_ai(
+    db: Session,
+    user_id: UUID,
+    plan_name: str,
+    days: int,
+    goal,
+    preferences: Optional[Dict] = None,
+    health_profile: Optional[Dict] = None
+) -> MealPlan:
+    """
+    Generate meal plan using AI service (PRIORITY when health_profile provided).
+    AI can create NEW dishes not in database.
+    """
+    import asyncio
+    
+    daily_calorie_target = int(goal.daily_calorie_target)
+    goal_type = goal.goal_type or "maintain"
+    
+    print(f"🤖 Starting AI meal plan generation...")
+    print(f"   - Daily calories: {daily_calorie_target}")
+    print(f"   - Goal type: {goal_type}")
+    print(f"   - Days: {days}")
+    
+    if health_profile:
+        print(f"   - Allergies: {health_profile.get('food_allergies', [])}")
+        print(f"   - Preferences: {health_profile.get('dietary_preferences', [])}")
+        print(f"   - Conditions: {health_profile.get('health_conditions', [])}")
+    
+    # Get available foods from database
+    available_foods = _get_available_foods_for_ai(db)
+    print(f"   - Available foods in DB: {len(available_foods)}")
+    
+    try:
+        # Call AI service
+        ai_result = asyncio.run(_call_ai_meal_planning(
+            daily_calorie_target=daily_calorie_target,
+            days=days,
+            goal_type=goal_type,
+            preferences=preferences,
+            available_foods=available_foods,
+            health_profile=health_profile
+        ))
+        
+        # Convert AI result to MealPlan
+        meal_plan = _convert_ai_result_to_meal_plan(
+            db, user_id, plan_name, ai_result, days, health_profile
+        )
+        
+        return meal_plan
+        
+    except Exception as e:
+        print(f"⚠️ AI service failed: {e}")
+        raise
+
+
 def generate_meal_plan(
     db: Session,
     user_id: UUID,
@@ -680,23 +895,48 @@ def generate_meal_plan(
     ).count()
 
     # 3. Determine generation method
+    # Default values when no goal exists
+    default_calorie_target = 2000
+    default_goal_type = "maintain"
+    
     if goal and goal.daily_calorie_target:
         goal_type = goal.goal_type or "maintain"
-        
-        # Recipe-based generation
-        if recipe_count > 0:
-            print(f"📋 Using recipe-based generation ({recipe_count} recipes available)...")
-            return _generate_with_recipes(
-                db, user_id, plan_name, days, goal, preferences, health_profile
-            )
-        
-        # Mock data fallback WITH health profile filter
-        print(f"⚠️ No recipes in database, using mock data with health profile filter...")
-        return _get_mock_meal_plan(db, user_id, plan_name, days, goal_type, health_profile)
+        daily_calorie = goal.daily_calorie_target
+        has_goal = True
+    else:
+        # No goal - use defaults but still try AI with health_profile
+        goal_type = default_goal_type
+        daily_calorie = default_calorie_target
+        has_goal = False
+        print(f"⚠️ No goal found, using defaults ({daily_calorie} kcal)...")
     
-    # No goal - use mock with health profile filter
-    print(f"⚠️ No goal found, using mock data with health profile filter...")
-    return _get_mock_meal_plan(db, user_id, plan_name, days, "maintain", health_profile)
+    # PRIORITY 1: AI Service when health_profile provided
+    # AI can create custom dishes not in database
+    # Also call AI if user has health_profile even without goal
+    if health_profile:
+        try:
+            print(f"🤖 Using AI service for personalized meal planning...")
+            # Create a pseudo-goal object for AI call
+            pseudo_goal = type('obj', (object,), {
+                'daily_calorie_target': daily_calorie,
+                'goal_type': goal_type
+            })()
+            return _generate_with_ai(
+                db, user_id, plan_name, days, pseudo_goal, preferences, health_profile
+            )
+        except Exception as e:
+            print(f"⚠️ AI generation failed: {e}, falling back to recipe-based...")
+    
+    # PRIORITY 2: Recipe-based generation (only if has recipes AND has goal)
+    if has_goal and recipe_count > 0:
+        print(f"📋 Using recipe-based generation ({recipe_count} recipes available)...")
+        return _generate_with_recipes(
+            db, user_id, plan_name, days, goal, preferences, health_profile
+        )
+    
+    # PRIORITY 3: Mock data fallback WITH health profile filter
+    print(f"⚠️ Using mock data with health profile filter...")
+    return _get_mock_meal_plan(db, user_id, plan_name, days, goal_type, health_profile)
 
 
 def _generate_with_recipes(
