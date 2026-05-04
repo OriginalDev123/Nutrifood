@@ -8,6 +8,7 @@ interface HealthProfileModalProps {
   onClose: () => void;
   onSave: (data: HealthProfileData) => void;
   initialData?: HealthProfileData;
+  isLoading?: boolean;
 }
 
 // Predefined options for common health conditions, allergies, and dietary preferences
@@ -67,8 +68,9 @@ export function HealthProfileModal({
   onClose,
   onSave,
   initialData,
+  isLoading = false,
 }: HealthProfileModalProps) {
-  const [isSaving, setIsSaving] = useState(false);
+  const [isSaving, setIsSaving] = useState(isLoading);
 
   const [healthConditions, setHealthConditions] = useState<string[]>([]);
   const [customCondition, setCustomCondition] = useState('');

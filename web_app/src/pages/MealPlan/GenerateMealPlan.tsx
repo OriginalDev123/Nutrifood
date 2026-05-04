@@ -1,13 +1,14 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Sparkles, Calendar, Clock, UtensilsCrossed, Heart, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Sparkles, Calendar, Clock, UtensilsCrossed, Heart, AlertTriangle, FileCheck } from 'lucide-react';
 import { Card, CardBody, CardHeader, Button, Input, Badge, useToast, Modal } from '../../components/ui';
 import { PageContainer } from '../../components/layout';
 import { mealPlanApi } from '../../api/mealPlan';
 import { healthProfileApi, type HealthProfileData } from '../../api/healthProfile';
 import { HealthProfileModal, HealthProfileDisplay } from '../../components/health';
 import type { MealPlanItem, MealPlanWithItems } from '../../api/extended';
+import { ApplyPlanModal } from '../../components/meal-plan/ApplyPlanModal';
 import { useDeleteMealPlan } from '../../hooks/useDeleteMealPlan';
 
 const MEAL_TYPE_VI: Record<MealPlanItem['meal_type'], string> = {
@@ -115,16 +116,20 @@ export default function GenerateMealPlanPage() {
   const [isHealthProfileModalOpen, setIsHealthProfileModalOpen] = useState(false);
 
   const [previewPlan, setPreviewPlan] = useState<MealPlanWithItems | null>(null);
+  const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
 
   // Load saved health profile
   const { data: savedHealthProfile, refetch: refetchHealthProfile } = useQuery({
     queryKey: ['healthProfile'],
     queryFn: () => healthProfileApi.getMyProfile(),
     retry: false,
-    onSuccess: (data) => {
-      setHealthProfile(data);
-    },
   });
+
+  useEffect(() => {
+    if (savedHealthProfile) {
+      setHealthProfile(savedHealthProfile);
+    }
+  }, [savedHealthProfile]);
 
   const closePreview = useCallback(() => {
     setPreviewPlan(null);
@@ -397,11 +402,19 @@ export default function GenerateMealPlanPage() {
                 Hủy kế hoạch
               </Button>
               <Button
-                variant="primary"
+                variant="outline"
                 onClick={handleUsePlan}
                 disabled={deletePreviewMutation.isPending}
               >
-                Sử dụng kế hoạch
+                <FileCheck className="w-4 h-4 mr-2" />
+                Lưu kế hoạch
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => setIsApplyModalOpen(true)}
+                disabled={deletePreviewMutation.isPending}
+              >
+                Áp dụng vào Nhật ký ăn
               </Button>
             </div>
           ) : null
@@ -409,6 +422,18 @@ export default function GenerateMealPlanPage() {
       >
         {previewPlan ? <MealPlanPreviewSummary plan={previewPlan} /> : null}
       </Modal>
+
+      {previewPlan && (
+        <ApplyPlanModal
+          isOpen={isApplyModalOpen}
+          onClose={() => setIsApplyModalOpen(false)}
+          plan={previewPlan}
+          onSuccess={() => {
+            closePreview();
+            navigate('/food-log');
+          }}
+        />
+      )}
     </PageContainer>
   );
 }

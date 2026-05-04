@@ -3,12 +3,12 @@ Meal Plan Service - CRUD Operations
 Handles database operations for meal plans and items
 """
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from uuid import UUID
 from decimal import Decimal, ROUND_HALF_UP
-from datetime import date
+from datetime import date, timedelta
 
 from app.models.meal_plan import MealPlan, MealPlanItem
 from app.models.food import Food
@@ -457,3 +457,139 @@ def mark_plan_completed(
     db.refresh(meal_plan)
     
     return meal_plan
+
+
+def apply_meal_plan_to_logs(
+    db: Session,
+    user_id: UUID,
+    plan_id: UUID,
+    start_date: date
+) -> dict:
+    """
+    Apply meal plan items to user's food logs
+    
+    Creates FoodLog entries directly (not via log_meal service) to preserve
+    snapshot nutrition data and handle Recipe-based items (food_id = null).
+    
+    Args:
+        db: Database session
+        user_id: User UUID (for authorization)
+        plan_id: Meal plan UUID
+        start_date: Date to start applying (in food log)
+    
+    Returns:
+        Dict with success status, counts, and date range
+    
+    Raises:
+        ValueError: If plan not found, not owned by user, or validation fails
+    """
+    from app.models.food_log import FoodLog
+    
+    # 1. Lấy meal plan với items (eager load để tránh N+1)
+    meal_plan = db.query(MealPlan).options(
+        joinedload(MealPlan.items)
+    ).filter(
+        MealPlan.plan_id == plan_id,
+        MealPlan.user_id == user_id,
+        MealPlan.is_deleted == False
+    ).first()
+    
+    if not meal_plan:
+        raise ValueError("Meal plan not found or access denied")
+    
+    # 2. Validate start_date
+    if start_date < date.today():
+        raise ValueError("Start date cannot be in the past")
+    
+    # 3. Tính offset ngày giữa start_date và plan.start_date
+    plan_start = meal_plan.start_date or date.today()
+    offset_days = (start_date - plan_start).days
+    
+    # 4. Xử lý từng item
+    items = list(meal_plan.items) if meal_plan.items else []
+    applied_count = 0
+    skipped_count = 0
+    
+    for item in items:
+        try:
+            # Tính ngày mới cho food log
+            item_date = item.day_date + timedelta(days=offset_days) if offset_days != 0 else item.day_date
+            
+            # Extract food_name - quan trọng để tránh lỗi NOT NULL constraint
+            food_name = None
+            
+            # Ưu tiên 1: Extract từ notes
+            if item.notes:
+                if item.notes.startswith("Recipe: "):
+                    food_name = item.notes.replace("Recipe: ", "")
+                elif item.notes.startswith("Custom: "):
+                    custom_part = item.notes.replace("Custom: ", "")
+                    pipe_index = custom_part.find(" | ")
+                    food_name = custom_part[:pipe_index] if pipe_index > 0 else custom_part
+            
+            # Ưu tiên 2: Query từ food table nếu có food_id
+            if not food_name and item.food_id:
+                food = db.query(Food).filter(Food.food_id == item.food_id).first()
+                if food:
+                    food_name = food.name_vi
+            
+            # Fallback: tạo tên mặc định (đảm bảo NOT NULL constraint)
+            if not food_name:
+                food_name = "Món ăn từ kế hoạch"
+            
+            # Tạo FoodLog entry với snapshot data từ MealPlanItem
+            food_log = FoodLog(
+                user_id=user_id,
+                food_id=item.food_id,
+                serving_id=None,
+                food_name=food_name,
+                serving_size_g=item.serving_size_g if item.serving_size_g else Decimal("100"),
+                quantity=item.quantity if item.quantity else Decimal("1"),
+                calories=item.calories if item.calories else Decimal("0"),
+                protein_g=item.protein_g if item.protein_g else Decimal("0"),
+                carbs_g=item.carbs_g if item.carbs_g else Decimal("0"),
+                fat_g=item.fat_g if item.fat_g else Decimal("0"),
+                meal_type=item.meal_type,
+                meal_date=item_date,
+                meal_time=None,
+                was_ai_recognized=False,
+                notes=f"Áp dụng từ kế hoạch: {meal_plan.plan_name}"
+            )
+            
+            db.add(food_log)
+            applied_count += 1
+            
+        except Exception:
+            skipped_count += 1
+            continue
+    
+    # 5. Commit tất cả trong một transaction
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise ValueError(f"Failed to apply meal plan: {str(e)}")
+    
+    # 6. Tính date range cho response
+    if items:
+        dates = [item.day_date for item in items if item.day_date]
+        if dates:
+            first_date = min(dates) + timedelta(days=offset_days)
+            last_date = max(dates) + timedelta(days=offset_days)
+        else:
+            first_date = start_date
+            last_date = start_date
+    else:
+        first_date = start_date
+        last_date = start_date
+    
+    return {
+        "success": True,
+        "applied_items": applied_count,
+        "skipped_items": skipped_count,
+        "date_range": {
+            "start": first_date.strftime("%Y-%m-%d"),
+            "end": last_date.strftime("%Y-%m-%d")
+        },
+        "message": f"Đã áp dụng kế hoạch '{meal_plan.plan_name}' vào Nhật ký ăn"
+    }

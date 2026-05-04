@@ -6,7 +6,7 @@ import { Card, CardBody, CardHeader, Button, Badge, Modal, Input, EmptyState, us
 import { DatePicker } from '../../components/ui/DatePicker';
 import { PageContainer } from '../../components/layout';
 import { goalApi } from '../../api/goal';
-import { healthProfileApi, type HealthProfileData } from '../../api/healthProfile';
+import type { HealthProfileData } from '../../api/healthProfile';
 import { HealthProfileModal, HealthProfileDisplay } from '../../components/health';
 
 export default function GoalsPage() {
@@ -78,30 +78,35 @@ export default function GoalsPage() {
             </div>
 
             {/* Health Profile Summary in Active Goal */}
-            {(activeGoal.health_conditions?.length > 0 || activeGoal.food_allergies?.length > 0 || activeGoal.dietary_preferences?.length > 0) && (
-              <div className="mt-6 pt-6 border-t border-gray-100">
-                <h3 className="text-sm font-medium text-gray-700 mb-4">Thể trạng</h3>
-                <div className="flex flex-wrap gap-2">
-                  {activeGoal.food_allergies?.length > 0 && (
-                    <Badge variant="danger">
-                      <AlertTriangle className="w-3 h-3 mr-1" />
-                      {activeGoal.food_allergies.length} dị ứng
-                    </Badge>
-                  )}
-                  {activeGoal.health_conditions?.length > 0 && (
-                    <Badge variant="info">
-                      <Heart className="w-3 h-3 mr-1" />
-                      {activeGoal.health_conditions.length} điều kiện
-                    </Badge>
-                  )}
-                  {activeGoal.dietary_preferences?.length > 0 && (
-                    <Badge variant="success">
-                      {activeGoal.dietary_preferences.length} chế độ ăn
-                    </Badge>
-                  )}
+            {(() => {
+              const hasConditions = (activeGoal as any).health_conditions?.length > 0;
+              const hasAllergies = (activeGoal as any).food_allergies?.length > 0;
+              const hasPreferences = (activeGoal as any).dietary_preferences?.length > 0;
+              return hasConditions || hasAllergies || hasPreferences ? (
+                <div className="mt-6 pt-6 border-t border-gray-100">
+                  <h3 className="text-sm font-medium text-gray-700 mb-4">Thể trạng</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {hasAllergies ? (
+                      <Badge variant="danger">
+                        <AlertTriangle className="w-3 h-3 mr-1" />
+                        {(activeGoal as any).food_allergies.length} dị ứng
+                      </Badge>
+                    ) : null}
+                    {hasConditions ? (
+                      <Badge variant="info">
+                        <Heart className="w-3 h-3 mr-1" />
+                        {(activeGoal as any).health_conditions.length} điều kiện
+                      </Badge>
+                    ) : null}
+                    {hasPreferences ? (
+                      <Badge variant="success">
+                        {(activeGoal as any).dietary_preferences.length} chế độ ăn
+                      </Badge>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-            )}
+              ) : null;
+            })()}
 
             {activeGoal.protein_target_g && activeGoal.carbs_target_g && activeGoal.fat_target_g && (
               <div className="mt-6 pt-6 border-t border-gray-100">

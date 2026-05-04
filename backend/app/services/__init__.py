@@ -16,6 +16,6 @@ from .analytics_service import get_nutrition_trends, get_weight_progress, get_ma
 from .recipe_service import create_recipe, get_recipes, get_recipe_by_id, search_recipes, update_recipe, delete_recipe, add_favorite, remove_favorite
 
 # 5. Meal Plan
-from .meal_plan_service import create_meal_plan, add_meal_plan_item, get_user_meal_plans, get_meal_plan_with_items,delete_meal_plan,update_meal_plan,delete_meal_plan_item,mark_plan_completed
+from .meal_plan_service import create_meal_plan, add_meal_plan_item, get_user_meal_plans, get_meal_plan_with_items, delete_meal_plan, update_meal_plan, delete_meal_plan_item, mark_plan_completed, apply_meal_plan_to_logs
 
 from .meal_plan_generator import generate_meal_plan, generate_shopping_list, analyze_meal_plan, regenerate_day

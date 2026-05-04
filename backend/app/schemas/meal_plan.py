@@ -2,7 +2,7 @@
 Meal Plan Schemas
 """
 
-from pydantic import BaseModel, Field, ConfigDict, field_serializer
+from pydantic import BaseModel, Field, ConfigDict, field_serializer, field_validator
 from typing import Optional, List, Dict
 from datetime import date, datetime, timedelta
 from uuid import UUID
@@ -235,3 +235,24 @@ class MealPlanUpdate(BaseModel):
             "status": "completed"
         }
     })
+
+
+class ApplyMealPlanRequest(BaseModel):
+    """Request body for applying meal plan to food logs"""
+    start_date: date = Field(..., description="Date to start applying meal plan (YYYY-MM-DD)")
+
+    @field_validator('start_date')
+    @classmethod
+    def validate_date(cls, v):
+        if v < date.today():
+            raise ValueError("Start date cannot be in the past")
+        return v
+
+
+class ApplyMealPlanResponse(BaseModel):
+    """Response after applying meal plan"""
+    success: bool
+    applied_items: int
+    skipped_items: int = 0
+    date_range: dict
+    message: str

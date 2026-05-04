@@ -412,8 +412,12 @@ def get_goal_progress(
         remaining = 0
     
     # Days tracking
-    days_elapsed = (date.today() - goal.created_at.date()).days
-    days_to_target = (goal.target_date - date.today()).days if goal.target_date else None
+    # Convert dates to date object if they're datetime
+    goal_created_at = goal.created_at.date() if hasattr(goal.created_at, 'date') else goal.created_at
+    goal_target_date = goal.target_date.date() if goal.target_date and hasattr(goal.target_date, 'date') else goal.target_date
+    
+    days_elapsed = (date.today() - goal_created_at).days
+    days_to_target = (goal_target_date - date.today()).days if goal_target_date else None
     
     return {
         "goal_type": goal.goal_type,

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Search, Trash2, ChevronLeft, ChevronRight, UtensilsCrossed, History, Camera, AlertCircle, CheckCircle, TrendingUp } from 'lucide-react';
+import { Plus, Search, Trash2, ChevronLeft, ChevronRight, UtensilsCrossed, History, Camera, AlertCircle, CheckCircle, TrendingUp, Calendar } from 'lucide-react';
 import { Card, CardBody, Button, Modal, EmptyState, Skeleton, Badge, useToast, Tabs, TabList, TabPanel } from '../../components/ui';
 import { PageContainer } from '../../components/layout';
 import { foodApi } from '../../api/food';
@@ -8,6 +8,7 @@ import { analyticsApi } from '../../api/analytics';
 import type { Food, FoodLog, FoodSearchResponse, DailySummary } from '../../api/types';
 import type { FoodPortionPreset } from '../../api/food';
 import type { CalorieNotification } from '../../api/extended';
+import { ApplyPlanModal } from '../../components/meal-plan/ApplyPlanModal';
 import { AIVisionTab } from './AIVisionTab';
 
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -31,6 +32,7 @@ export default function FoodLogPage() {
   const [historyMealType, setHistoryMealType] = useState('');
   const [isAddFoodModalOpen, setIsAddFoodModalOpen] = useState(false);
   const [selectedMealType, setSelectedMealType] = useState<MealType>('breakfast');
+  const [isApplyPlanModalOpen, setIsApplyPlanModalOpen] = useState(false);
   const queryClient = useQueryClient();
   const toast = useToast();
 
@@ -195,6 +197,13 @@ export default function FoodLogPage() {
             leftIcon={<History className="h-4 w-4" />}
           >
             {isHistoryMode ? 'Xem theo ngày' : 'Lịch sử'}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setIsApplyPlanModalOpen(true)}
+            leftIcon={<Calendar className="h-4 w-4" />}
+          >
+            Áp dụng kế hoạch
           </Button>
           <Button onClick={() => setIsAddFoodModalOpen(true)} leftIcon={<Plus className="h-4 w-4" />}>
             Thêm món
@@ -414,6 +423,16 @@ export default function FoodLogPage() {
         onClose={() => setIsAddFoodModalOpen(false)}
         mealDate={selectedDate}
         mealType={selectedMealType}
+      />
+
+      <ApplyPlanModal
+        isOpen={isApplyPlanModalOpen}
+        onClose={() => setIsApplyPlanModalOpen(false)}
+        onSuccess={(appliedCount) => {
+          queryClient.invalidateQueries({ queryKey: ['foodLogs'] });
+          queryClient.invalidateQueries({ queryKey: ['dailySummary'] });
+          toast.success(`Đã thêm ${appliedCount} món ăn vào Nhật ký ăn`);
+        }}
       />
     </PageContainer>
   );

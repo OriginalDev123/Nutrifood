@@ -22,6 +22,17 @@ export interface RegenerateDayParams {
   target_date: string;
 }
 
+export interface ApplyMealPlanResponse {
+  success: boolean;
+  applied_items: number;
+  skipped_items: number;
+  date_range: {
+    start: string;
+    end: string;
+  };
+  message: string;
+}
+
 export const mealPlanApi = {
   /**
    * Generate a new meal plan with AI-like algorithm
@@ -103,6 +114,16 @@ export const mealPlanApi = {
    */
   archivePlan: async (planId: string): Promise<MealPlan> => {
     const response = await apiClient.patch(`/meal-plans/${planId}`, { status: 'archived' });
+    return response.data;
+  },
+
+  /**
+   * Apply meal plan to food logs
+   */
+  applyMealPlan: async (planId: string, startDate: string): Promise<ApplyMealPlanResponse> => {
+    const response = await apiClient.post(`/meal-plans/${planId}/apply`, {
+      start_date: startDate
+    });
     return response.data;
   },
 };

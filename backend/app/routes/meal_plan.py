@@ -28,7 +28,8 @@ from app.services import (
     add_meal_plan_item,
     generate_shopping_list,
     analyze_meal_plan,
-    regenerate_day
+    regenerate_day,
+    apply_meal_plan_to_logs
 )
 from app.services.meal_plan_generator import generate_meal_plan as generate_meal_plan_service
 from app.utils.dependencies import get_current_active_user
@@ -251,6 +252,54 @@ def api_update_plan(
     
     return plan
 
+
+# ==========================================
+# APPLY MEAL PLAN TO FOOD LOGS
+# ==========================================
+
+@router.post("/{plan_id}/apply", response_model=schemas.ApplyMealPlanResponse)
+def api_apply_meal_plan(
+    plan_id: UUID,
+    request: schemas.ApplyMealPlanRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Apply meal plan items to user's food logs
+    
+    Takes all items from the meal plan and creates corresponding FoodLog entries,
+    mapping them to the specified start_date. Nutrition values are copied as 
+    snapshots from the meal plan items.
+    
+    **Request Body:**
+    - start_date: Date to start applying the meal plan (YYYY-MM-DD)
+      - Must be today or in the future
+      - Plan items will be offset from their original dates accordingly
+    
+    **Response:**
+    - success: Boolean indicating success
+    - applied_items: Number of food log entries created
+    - skipped_items: Number of items that failed to apply
+    - date_range: Start and end dates of applied items
+    - message: Human-readable status message
+    
+    **Example:**
+    ```json
+    POST /meal-plans/123e4567-e89b-12d3-a456-426614174000/apply
+    {
+      "start_date": "2024-12-27"
+    }
+    ```
+    """
+    try:
+        return apply_meal_plan_to_logs(
+            db=db,
+            user_id=current_user.user_id,
+            plan_id=plan_id,
+            start_date=request.start_date
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 """
